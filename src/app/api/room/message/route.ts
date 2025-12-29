@@ -1,7 +1,8 @@
 // POST /api/room/message - Add a human message and trigger collaboration burst with SSE streaming
+// CHANGED: Updated to handle new event types and stop reasons
 
 import { z } from "zod";
-import { getRoom, addMessage, setGoal, getParticipant } from "@/lib/store";
+import { getRoom, addMessage, setGoal, getParticipant, setActiveRun } from "@/lib/store";
 import { runCollaborationBurstStream } from "@/lib/agents/orchestrator";
 
 const messageSchema = z.object({
@@ -32,6 +33,10 @@ export async function POST(request: Request) {
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
+
+    // CHANGED: Cancel any existing run before starting new one
+    // This triggers cancellation via shouldCancelRun check in orchestrator
+    setActiveRun(null);
 
     // Update goal if provided
     if (goal) {
@@ -68,16 +73,27 @@ export async function POST(request: Request) {
               sendEvent("summary", { summary: event.summary });
             } else if (event.type === "error") {
               sendEvent("error", { error: event.error });
+            } else if (event.type === "status") {
+              // CHANGED: Handle new status event
+              sendEvent("status", { status: event.status });
             } else if (event.type === "done") {
-              // Send final room state
+              // CHANGED: Include stopReason in done event
               const room = getRoom();
-              sendEvent("done", { room });
+              sendEvent("done", {
+                room,
+                stopReason: event.stopReason,
+                // CHANGED: Include canonical state for frontend
+                canonicalState: room.canonicalState,
+              });
             }
           }
         } catch (error) {
           console.error("Error in collaboration burst:", error);
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
           sendEvent("error", { error: errorMessage });
+          // CHANGED: Send done event even on error
+          const room = getRoom();
+          sendEvent("done", { room, stopReason: "ERROR" });
         }
 
         controller.close();
