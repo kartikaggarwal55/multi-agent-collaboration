@@ -28,7 +28,7 @@ export interface Message {
 // CHANGED: Added OpenQuestion type for structured question tracking
 export interface OpenQuestion {
   id: string;
-  target: "Alice" | "Bob" | "All";
+  target: string; // Dynamic participant name or "All"
   question: string;
   askedBy: string;
   askedAt: string;
@@ -61,11 +61,11 @@ export type NextAction = "CONTINUE" | "WAIT_FOR_USER" | "HANDOFF_DONE";
 
 export interface TurnMeta {
   next_action: NextAction;
-  questions_for_user: Array<{ target: "Alice" | "Bob" | "All"; question: string }>;
+  questions_for_user: Array<{ target: string; question: string }>; // Dynamic participant names
   state_patch: Partial<StatePatch>;
   confidence: number;
   reason_brief: string;
-  next_speaker?: "alice-assistant" | "bob-assistant";
+  next_speaker?: string; // Dynamic assistant ID
 }
 
 // CHANGED: State patch structure for incremental updates
@@ -73,7 +73,7 @@ export interface StatePatch {
   leading_option?: string;
   status_summary?: string[];
   add_constraints?: Array<{ participantId: string; constraint: string }>;
-  add_questions?: Array<{ target: "Alice" | "Bob" | "All"; question: string }>;
+  add_questions?: Array<{ target: string; question: string }>; // Dynamic participant names
   resolve_questions?: string[]; // question IDs to mark resolved
   suggested_next_steps?: string[];
   stage?: CanonicalState["stage"];

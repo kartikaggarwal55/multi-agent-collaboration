@@ -25,6 +25,10 @@ model User {
   // CHANGED: Private chat messages
   privateMessages PrivateMessage[]
 
+  // Group collaborations
+  createdGroups  Group[]       @relation("GroupCreator")
+  groupMembers   GroupMember[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -94,4 +98,58 @@ model PrivateMessage {
   citations String?  // JSON array of citation objects
 
   createdAt DateTime @default(now())
+}
+
+// Group collaboration models
+model Group {
+  id          String   @id @default(cuid())
+  title       String?
+  goal        String?
+  createdById String
+  createdBy   User     @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Canonical state stored as JSON
+  canonicalState String @default("{}")
+
+  // Summary for backward compatibility
+  summary     String?
+
+  members     GroupMember[]
+  messages    GroupMessage[]
+
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role     String   @default("member") // "creator" | "member"
+  isActive Boolean  @default(true)
+
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model GroupMessage {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  // Author can be a user ID or "userId-assistant" for assistants
+  authorId   String
+  authorName String
+  role       String  // "user" | "assistant"
+  content    String
+
+  // Optional: citations from web search
+  citations  String? // JSON array of citation objects
+
+  createdAt  DateTime @default(now())
 }

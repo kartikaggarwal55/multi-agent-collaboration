@@ -1,4 +1,4 @@
-// CHANGED: Navigation component with updated design
+// Navigation component for switching between views
 "use client";
 
 import Link from "next/link";
@@ -22,20 +22,21 @@ const UserIcon = () => (
 
 export function ChatNav() {
   const pathname = usePathname();
+  const isGroups = pathname.startsWith("/groups");
   const isPersonal = pathname === "/me/assistant";
 
   return (
     <div className="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-lg border border-border/50">
       <Link
-        href="/"
+        href="/groups"
         className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
-          !isPersonal
+          isGroups
             ? "bg-card text-foreground shadow-sm border border-border/50"
             : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
         }`}
       >
         <UsersIcon />
-        <span>Group</span>
+        <span>Groups</span>
       </Link>
       <Link
         href="/me/assistant"

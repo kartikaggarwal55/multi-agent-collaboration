@@ -324,7 +324,7 @@ export function generateCapReachedHandoff(
  */
 export function generateStallUnblockQuestion(
   canonicalState: CanonicalState
-): { target: "Alice" | "Bob" | "All"; question: string } {
+): { target: string; question: string } {
   // Pick the most important open question, or generate a generic one
   const unresolvedQ = canonicalState.openQuestions.find((q) => !q.resolved);
   if (unresolvedQ) {

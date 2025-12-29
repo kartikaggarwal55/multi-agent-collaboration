@@ -197,7 +197,7 @@ export default function PrivateAssistantPage() {
       <div className="absolute inset-0 noise-overlay pointer-events-none" />
 
       {/* Main chat area */}
-      <div className="flex flex-1 flex-col relative overflow-hidden">
+      <div className="flex flex-1 flex-col relative overflow-hidden bg-gradient-to-bl from-transparent via-transparent to-[oklch(0.20_0.03_55/0.4)]">
         {/* Header */}
         <header className="px-6 py-4 border-b border-border/50 bg-background/80 backdrop-blur-xl relative z-10">
           <div className="flex items-center justify-between">
@@ -432,12 +432,9 @@ function MessageBubble({
           <div
             className={`rounded-xl px-4 py-3 ${
               isUser
-                ? "text-primary-foreground"
+                ? "bg-[oklch(0.68_0.16_55)] text-primary-foreground"
                 : "bg-card border border-border/50"
             }`}
-            style={isUser ? {
-              background: `linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 50%, transparent 100%), oklch(0.75 0.14 55)`
-            } : undefined}
           >
             {isUser ? (
               <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>

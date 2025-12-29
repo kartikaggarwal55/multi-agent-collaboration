@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/select";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { RoomState, Message, Participant, CanonicalState } from "@/lib/types";
-import { ChatNav } from "@/components/chat-nav";
 
 // Icons
 const SendIcon = () => (
@@ -74,7 +74,23 @@ const ArrowRightIcon = () => (
   </svg>
 );
 
+const ExitIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+);
+
+// Demo mode check - hidden by default
+function isDemoMode(): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem("demoMode") === "true";
+}
+
 export default function Home() {
+  const router = useRouter();
+  const [demoMode, setDemoMode] = useState<boolean | null>(null);
   const [room, setRoom] = useState<RoomState | null>(null);
   const [speakerId, setSpeakerId] = useState<string>("alice");
   const [message, setMessage] = useState("");
@@ -84,14 +100,44 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Check demo mode on mount
   useEffect(() => {
-    fetchRoom();
-  }, []);
+    const isDemo = isDemoMode();
+    setDemoMode(isDemo);
+    if (!isDemo) {
+      router.replace("/groups");
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (demoMode) {
+      fetchRoom();
+    }
+  }, [demoMode]);
 
   // Scroll to bottom when messages change or on mount
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [room?.messages]);
+
+  const exitDemoMode = () => {
+    localStorage.removeItem("demoMode");
+    router.push("/groups");
+  };
+
+  // Show loading while checking demo mode
+  if (demoMode === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // If not in demo mode, redirect happens in useEffect
+  if (!demoMode) {
+    return null;
+  }
 
   const fetchRoom = async () => {
     try {
@@ -237,10 +283,18 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-lg font-semibold tracking-tight">Collaboration Room</h1>
-                <p className="text-xs text-muted-foreground">Multi-agent planning session</p>
+                <p className="text-xs text-muted-foreground">Demo mode - Alice & Bob</p>
               </div>
             </div>
-            <ChatNav />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={exitDemoMode}
+              className="gap-2"
+            >
+              <ExitIcon />
+              Exit Demo
+            </Button>
           </div>
         </header>
 

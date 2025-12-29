@@ -243,19 +243,20 @@ export async function POST(request: Request) {
                   sendEvent("status", { status: `Checking calendar...` });
 
                   const toolResult = await executeCalendarTool(
+                    userId,
                     block.name,
-                    block.input as Record<string, unknown>,
-                    userId
+                    block.input as Record<string, unknown>
                   );
 
-                  if (toolResult.needsReconnect) {
+                  // Check if result indicates reconnect needed
+                  if (toolResult.includes("needs to be reconnected")) {
                     needsReconnect = true;
                   }
 
                   toolResults.push({
                     type: "tool_result",
                     tool_use_id: block.id,
-                    content: toolResult.result,
+                    content: toolResult,
                   });
                 }
               }
