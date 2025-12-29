@@ -68,14 +68,14 @@ Produce a summary with these sections (use markdown formatting):
 ### Current Status
 What's the leading option or decision? If none yet, what stage is the conversation at?
 
+### Suggested Next Steps
+1-2 concrete next actions, if any.
+
 ### Key Constraints Surfaced
 What preferences or constraints have been identified for each person?
 
 ### Open Questions
 What still needs to be resolved? (If nothing, say "None - ready to proceed")
-
-### Suggested Next Steps
-1-2 concrete next actions, if any.
 
 Keep each section brief (1-3 bullet points max). If the conversation is just starting, reflect that the assistants are beginning to coordinate.`;
 }

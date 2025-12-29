@@ -26,15 +26,21 @@ const SUMMARY_MODEL = process.env.SUMMARY_MODEL || "claude-haiku-4-5";
 // Max rounds for A2A collaboration
 const MAX_ROUNDS = 2;
 
+// Event types for streaming
+export type CollaborationEvent =
+  | { type: "message"; message: Message }
+  | { type: "summary"; summary: string }
+  | { type: "error"; error: string }
+  | { type: "done" };
+
 /**
  * Run a collaboration burst where assistants respond to each other
- * Returns the new messages and updated summary
+ * Yields messages as they are generated for real-time streaming
  */
-export async function runCollaborationBurst(
+export async function* runCollaborationBurstStream(
   roomId: string,
   triggerMessageId: string
-): Promise<{ newMessages: Message[]; summary: string }> {
-  const newMessages: Message[] = [];
+): AsyncGenerator<CollaborationEvent> {
   const assistants = getAssistants();
 
   // Run up to MAX_ROUNDS rounds (each round = both assistants respond)
@@ -69,9 +75,14 @@ export async function runCollaborationBurst(
           citations: response.citations,
         });
 
-        newMessages.push(message);
+        // Yield the message immediately
+        yield { type: "message", message };
       } catch (error) {
         console.error(`Error calling assistant ${assistant.displayName}:`, error);
+        yield {
+          type: "error",
+          error: `${assistant.displayName} encountered an error`,
+        };
         // Continue with other assistants even if one fails
       }
     }
@@ -81,6 +92,28 @@ export async function runCollaborationBurst(
   const room = getRoom();
   const summary = await generateSummary(room);
   updateSummary(summary);
+
+  yield { type: "summary", summary };
+  yield { type: "done" };
+}
+
+/**
+ * Legacy non-streaming version (kept for backwards compatibility)
+ */
+export async function runCollaborationBurst(
+  roomId: string,
+  triggerMessageId: string
+): Promise<{ newMessages: Message[]; summary: string }> {
+  const newMessages: Message[] = [];
+  let summary = "";
+
+  for await (const event of runCollaborationBurstStream(roomId, triggerMessageId)) {
+    if (event.type === "message") {
+      newMessages.push(event.message);
+    } else if (event.type === "summary") {
+      summary = event.summary;
+    }
+  }
 
   return { newMessages, summary };
 }

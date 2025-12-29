@@ -23,6 +23,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
   const [goal, setGoal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [currentlyTyping, setCurrentlyTyping] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +60,12 @@ export default function Home() {
 
     setIsLoading(true);
     setError(null);
+    setMessage(""); // Clear input immediately
+    // Set initial typing indicator to first assistant
+    const assistants = room?.participants.filter(p => p.kind === "assistant") || [];
+    if (assistants.length > 0) {
+      setCurrentlyTyping(assistants[0].displayName);
+    }
 
     try {
       const response = await fetch("/api/room/message", {
@@ -71,19 +78,83 @@ export default function Home() {
         }),
       });
 
-      const data = await response.json();
+      // Check if response is SSE stream
+      const contentType = response.headers.get("content-type");
+      if (contentType?.includes("text/event-stream")) {
+        // Handle SSE streaming
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send message");
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse SSE events from buffer
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || ""; // Keep incomplete line in buffer
+
+          let eventType = "";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              eventType = line.slice(7);
+            } else if (line.startsWith("data: ")) {
+              const data = JSON.parse(line.slice(6));
+
+              if (eventType === "message") {
+                // Add message to room state
+                setRoom((prev) => {
+                  if (!prev) return prev;
+                  // Check if message already exists
+                  const exists = prev.messages.some((m) => m.id === data.message.id);
+                  if (exists) return prev;
+                  return {
+                    ...prev,
+                    messages: [...prev.messages, data.message],
+                  };
+                });
+                // Update typing indicator to show next assistant
+                const assistants = room?.participants.filter(p => p.kind === "assistant") || [];
+                const currentIndex = assistants.findIndex(a => a.id === data.message.authorId);
+                const nextAssistant = assistants[(currentIndex + 1) % assistants.length];
+                if (nextAssistant && data.message.role === "assistant") {
+                  setCurrentlyTyping(nextAssistant.displayName);
+                }
+              } else if (eventType === "summary") {
+                // Update summary - generating summary is the last step
+                setCurrentlyTyping("Generating summary...");
+                setRoom((prev) => {
+                  if (!prev) return prev;
+                  return { ...prev, summary: data.summary };
+                });
+              } else if (eventType === "error") {
+                setError(data.error);
+              } else if (eventType === "done") {
+                // Final room state update
+                setRoom(data.room);
+                setCurrentlyTyping(null);
+              }
+            }
+          }
+        }
+      } else {
+        // Handle non-streaming response (error case)
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Failed to send message");
+        }
+        setRoom(data.room);
       }
-
-      setRoom(data.room);
-      setMessage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
       console.error(err);
     } finally {
       setIsLoading(false);
+      setCurrentlyTyping(null);
     }
   };
 
@@ -168,11 +239,15 @@ export default function Home() {
               />
             ))}
 
-            {isLoading && (
-              <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-                <div className="animate-spin h-5 w-5 border-2 border-primary border-t-transparent rounded-full" />
+            {isLoading && currentlyTyping && (
+              <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50 animate-pulse">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
                 <span className="text-sm text-muted-foreground">
-                  Assistants coordinating...
+                  {currentlyTyping} is typing...
                 </span>
               </div>
             )}

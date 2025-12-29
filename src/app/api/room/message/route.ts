@@ -1,9 +1,8 @@
-// POST /api/room/message - Add a human message and trigger collaboration burst
+// POST /api/room/message - Add a human message and trigger collaboration burst with SSE streaming
 
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getRoom, addMessage, setGoal, getParticipant } from "@/lib/store";
-import { runCollaborationBurst } from "@/lib/agents/orchestrator";
+import { runCollaborationBurstStream } from "@/lib/agents/orchestrator";
 
 const messageSchema = z.object({
   speakerId: z.string(),
@@ -17,9 +16,9 @@ export async function POST(request: Request) {
     const parsed = messageSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json(
-        { error: "Invalid request body", details: parsed.error.format() },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: "Invalid request body", details: parsed.error.format() }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -28,9 +27,9 @@ export async function POST(request: Request) {
     // Validate speaker exists and is human
     const speaker = getParticipant(speakerId);
     if (!speaker || speaker.kind !== "human") {
-      return NextResponse.json(
-        { error: "Invalid speaker ID. Must be a human participant." },
-        { status: 400 }
+      return new Response(
+        JSON.stringify({ error: "Invalid speaker ID. Must be a human participant." }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -47,25 +46,58 @@ export async function POST(request: Request) {
       content,
     });
 
-    // Run collaboration burst
-    const { newMessages, summary } = await runCollaborationBurst(
-      "demo",
-      humanMessage.id
-    );
+    // Create a streaming response using SSE
+    const stream = new ReadableStream({
+      async start(controller) {
+        const encoder = new TextEncoder();
 
-    // Return updated room state
-    const room = getRoom();
-    return NextResponse.json({
-      room,
-      newMessages: [humanMessage, ...newMessages],
+        // Helper to send SSE event
+        const sendEvent = (event: string, data: unknown) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
+
+        // Send the human message first
+        sendEvent("message", { message: humanMessage });
+
+        // Stream collaboration burst events
+        try {
+          for await (const event of runCollaborationBurstStream("demo", humanMessage.id)) {
+            if (event.type === "message") {
+              sendEvent("message", { message: event.message });
+            } else if (event.type === "summary") {
+              sendEvent("summary", { summary: event.summary });
+            } else if (event.type === "error") {
+              sendEvent("error", { error: event.error });
+            } else if (event.type === "done") {
+              // Send final room state
+              const room = getRoom();
+              sendEvent("done", { room });
+            }
+          }
+        } catch (error) {
+          console.error("Error in collaboration burst:", error);
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          sendEvent("error", { error: errorMessage });
+        }
+
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
     });
   } catch (error) {
     console.error("Error processing message:", error);
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";
-    return NextResponse.json(
-      { error: "Failed to process message", details: errorMessage },
-      { status: 500 }
+    return new Response(
+      JSON.stringify({ error: "Failed to process message", details: errorMessage }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 }
