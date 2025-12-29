@@ -78,7 +78,7 @@ export default function PrivateAssistantPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -92,10 +92,9 @@ export default function PrivateAssistantPage() {
     }
   }, [status]);
 
+  // Scroll to bottom when messages change or on mount
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [messages]);
 
   const fetchChatData = async () => {
@@ -226,7 +225,7 @@ export default function PrivateAssistantPage() {
         </header>
 
         {/* Messages - FULL WIDTH */}
-        <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-0">
           <div className="px-6 py-4 space-y-4">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -268,6 +267,9 @@ export default function PrivateAssistantPage() {
                 </div>
               </div>
             )}
+
+            {/* Scroll anchor */}
+            <div ref={bottomRef} />
           </div>
         </ScrollArea>
 
@@ -306,7 +308,7 @@ export default function PrivateAssistantPage() {
       </div>
 
       {/* Right panel - Profile */}
-      <div className="w-[320px] shrink-0 border-l border-border/30 glass-panel relative overflow-hidden">
+      <div className="w-[340px] shrink-0 border-l border-border/30 glass-panel relative overflow-hidden">
         <div className="h-full flex flex-col">
           {/* User info */}
           <div className="px-5 py-4 border-b border-border/30 flex items-center gap-3">
@@ -430,9 +432,12 @@ function MessageBubble({
           <div
             className={`rounded-xl px-4 py-3 ${
               isUser
-                ? "bg-primary text-primary-foreground"
+                ? "text-primary-foreground"
                 : "bg-card border border-border/50"
             }`}
+            style={isUser ? {
+              background: `linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 50%, transparent 100%), oklch(0.75 0.14 55)`
+            } : undefined}
           >
             {isUser ? (
               <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>

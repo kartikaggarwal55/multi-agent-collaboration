@@ -28,7 +28,7 @@ export function ChatNav() {
     <div className="flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-lg border border-border/50">
       <Link
         href="/"
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
           !isPersonal
             ? "bg-card text-foreground shadow-sm border border-border/50"
             : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -39,7 +39,7 @@ export function ChatNav() {
       </Link>
       <Link
         href="/me/assistant"
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 ${
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 cursor-pointer ${
           isPersonal
             ? "bg-card text-foreground shadow-sm border border-border/50"
             : "text-muted-foreground hover:text-foreground hover:bg-muted/50"

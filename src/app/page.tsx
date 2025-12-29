@@ -82,16 +82,15 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [currentlyTyping, setCurrentlyTyping] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchRoom();
   }, []);
 
+  // Scroll to bottom when messages change or on mount
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [room?.messages]);
 
   const fetchRoom = async () => {
@@ -262,7 +261,7 @@ export default function Home() {
         </div>
 
         {/* Messages - FULL WIDTH, no max-width constraint */}
-        <ScrollArea className="flex-1 min-h-0" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-0">
           <div className="px-6 py-4 space-y-3">
             {room?.messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -303,11 +302,20 @@ export default function Home() {
                         <span className="text-[10px] text-muted-foreground">{formatTime(msg.createdAt)}</span>
                       </div>
 
-                      <div className={`rounded-xl px-4 py-3 ${
-                        isUser
-                          ? `${colors.bg} ${colors.text}`
-                          : "bg-card border border-border/50"
-                      }`}>
+                      <div
+                        className={`rounded-xl px-4 py-3 ${
+                          isUser
+                            ? `${colors.text}`
+                            : "bg-card border border-border/50"
+                        }`}
+                        style={isUser ? {
+                          background: `linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 50%, transparent 100%), ${
+                            msg.authorId === "alice"
+                              ? "oklch(0.72 0.18 330)"
+                              : "oklch(0.68 0.14 200)"
+                          }`
+                        } : undefined}
+                      >
                         {msg.role === "assistant" ? (
                           <div className="prose prose-sm prose-invert max-w-none prose-chat">
                             <ReactMarkdown
@@ -357,6 +365,9 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+            {/* Scroll anchor */}
+            <div ref={bottomRef} />
           </div>
         </ScrollArea>
 
