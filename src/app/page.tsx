@@ -255,10 +255,11 @@ export default function Home() {
   };
 
   const getParticipantColor = (authorId: string): { bg: string; text: string; border: string } => {
-    if (authorId === "alice") return { bg: "bg-[oklch(0.72_0.18_330)]", text: "text-white", border: "border-[oklch(0.72_0.18_330)]" };
-    if (authorId === "bob") return { bg: "bg-[oklch(0.68_0.14_200)]", text: "text-white", border: "border-[oklch(0.68_0.14_200)]" };
-    if (authorId === "alice-assistant") return { bg: "bg-[oklch(0.28_0.08_330)]", text: "text-[oklch(0.85_0.12_330)]", border: "border-[oklch(0.40_0.10_330)]" };
-    if (authorId === "bob-assistant") return { bg: "bg-[oklch(0.26_0.06_200)]", text: "text-[oklch(0.82_0.10_200)]", border: "border-[oklch(0.38_0.08_200)]" };
+    // Simple orange, black, white color scheme
+    if (authorId === "alice") return { bg: "bg-[oklch(0.65_0.15_55)]", text: "text-white", border: "border-[oklch(0.65_0.15_55)]" };
+    if (authorId === "bob") return { bg: "bg-[oklch(0.60_0.14_50)]", text: "text-white", border: "border-[oklch(0.60_0.14_50)]" };
+    if (authorId === "alice-assistant") return { bg: "bg-[oklch(0.25_0.02_55)]", text: "text-[oklch(0.70_0.12_55)]", border: "border-[oklch(0.35_0.03_55)]" };
+    if (authorId === "bob-assistant") return { bg: "bg-[oklch(0.25_0.02_50)]", text: "text-[oklch(0.70_0.12_50)]", border: "border-[oklch(0.35_0.03_50)]" };
     return { bg: "bg-muted", text: "text-muted-foreground", border: "border-border" };
   };
 
@@ -316,7 +317,7 @@ export default function Home() {
 
         {/* Messages - FULL WIDTH, no max-width constraint */}
         <ScrollArea className="flex-1 min-h-0">
-          <div className="px-6 py-4 space-y-3">
+          <div className="px-6 py-4 space-y-4">
             {room?.messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mb-4 border border-border/50">
@@ -346,29 +347,22 @@ export default function Home() {
                     </Avatar>
 
                     <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
-                      <div className={`flex items-center gap-2 mb-1 ${isUser ? "flex-row-reverse" : ""}`}>
-                        <span className="text-xs font-medium">{msg.authorName}</span>
+                      <div className={`flex items-center gap-2 mb-1.5 ${isUser ? "flex-row-reverse" : ""}`}>
+                        <span className="text-xs font-medium text-foreground/90">{msg.authorName}</span>
                         {msg.role === "assistant" && (
                           <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${isAlice ? "badge-alice" : "badge-bob"}`}>
                             AI
                           </span>
                         )}
-                        <span className="text-[10px] text-muted-foreground">{formatTime(msg.createdAt)}</span>
+                        <span className="text-[10px] text-muted-foreground/70">{formatTime(msg.createdAt)}</span>
                       </div>
 
                       <div
                         className={`rounded-xl px-4 py-3 ${
                           isUser
-                            ? `${colors.text}`
-                            : "bg-card border border-border/50"
+                            ? `${colors.bg} ${colors.text} shadow-sm border ${colors.border}`
+                            : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
                         }`}
-                        style={isUser ? {
-                          background: `linear-gradient(to right, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 50%, transparent 100%), ${
-                            msg.authorId === "alice"
-                              ? "oklch(0.72 0.18 330)"
-                              : "oklch(0.68 0.14 200)"
-                          }`
-                        } : undefined}
                       >
                         {msg.role === "assistant" ? (
                           <div className="prose prose-sm prose-invert max-w-none prose-chat">

@@ -58,6 +58,12 @@ const MessageIcon = () => (
   </svg>
 );
 
+const PlayIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="5 3 19 12 5 21 5 3" />
+  </svg>
+);
+
 interface GroupMember {
   id: string;
   name: string | null;
@@ -96,18 +102,10 @@ export default function GroupsPage() {
     }
   }, [status, router]);
 
-  // Hidden demo mode activation via keyboard shortcut (Ctrl+Shift+D)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === "D") {
-        e.preventDefault();
-        localStorage.setItem("demoMode", "true");
-        router.push("/");
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [router]);
+  const enterDemoMode = () => {
+    localStorage.setItem("demoMode", "true");
+    router.push("/");
+  };
 
   const fetchGroups = async () => {
     try {
@@ -220,6 +218,14 @@ export default function GroupsPage() {
             >
               <PlusIcon />
               <span className="ml-2">New Group</span>
+            </Button>
+            <Button
+              onClick={enterDemoMode}
+              variant="secondary"
+              className="h-10 px-4 rounded-lg"
+            >
+              <PlayIcon />
+              <span className="ml-2">Demo</span>
             </Button>
             <Button
               variant="ghost"

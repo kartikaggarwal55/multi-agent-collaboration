@@ -28,21 +28,100 @@ const PARTICIPANTS: Participant[] = [
   },
 ];
 
-// Seeded preferences for each human
+// Seeded preferences for each human - rich profiles for demo
 export const HUMAN_PREFERENCES: Record<string, string> = {
-  alice: `Alice's baseline preferences (treat as priors, not hard constraints):
-- Generally prefers calm and quiet environments
-- Usually likes earlier nights (not too late)
-- Tends to be budget-conscious
-- Vegetarian-friendly food is typically important
-- Often values relaxing, low-key activities`,
+  alice: `Alice's Profile (treat as priors that can be overridden by explicit statements in conversation):
 
-  bob: `Bob's baseline preferences (treat as priors, not hard constraints):
-- Generally social and enjoys lively atmospheres
-- Usually flexible on timing
-- Often adventurous with food choices
-- Typically okay with moderate cost
-- Tends to be open to trying new experiences`,
+**Personal Info:**
+- Lives in Brooklyn, NY (Park Slope area)
+- Works as a UX Designer at a tech startup, typically 9am-6pm
+- Has a 7-year-old daughter, Emma, who stays with her ex on weekends
+- Partner: Dating Marcus (together 8 months), who lives in Manhattan
+
+**Schedule & Availability:**
+- Weekday evenings free after 7pm (after Emma's bedtime on her custody days)
+- Weekends much more flexible when Emma is with her dad
+- Prefers meetings/events to end by 10pm on work nights
+- Tuesday evenings reserved for yoga class (7-8:30pm)
+- Thursday mornings she does school drop-off, so can't meet before 9:30am
+
+**Food & Dining:**
+- Strict vegetarian for 12 years (no meat, no fish)
+- Mild dairy intolerance - can have small amounts but prefers dairy-free
+- Loves Thai, Indian, and Mediterranean cuisines
+- Avoids overly loud restaurants (hard to have conversations)
+- Prefers restaurants with good veggie options, not just "one sad salad"
+- Budget: Usually $30-50/person for nice dinners, can stretch for special occasions
+
+**Activities & Interests:**
+- Avid hiker - loves trails in the Hudson Valley
+- Enjoys museums, especially modern art
+- Practices yoga 2-3x per week
+- Book club meets first Monday of each month
+- Not a fan of loud bars or nightclubs
+- Enjoys wine but rarely drinks more than 2 glasses
+
+**Travel & Transportation:**
+- Doesn't own a car, relies on subway and occasional Uber
+- Gets motion sick on long car rides (prefers train for longer trips)
+- Has never been to Europe, dreams of visiting Italy
+- Prefers nature/hiking vacations over beach resorts
+
+**Social Style:**
+- Introvert who enjoys small group gatherings (4-6 people ideal)
+- Needs quiet time to recharge after big social events
+- Values deep conversations over small talk
+- Punctual - dislikes when people are significantly late`,
+
+  bob: `Bob's Profile (treat as priors that can be overridden by explicit statements in conversation):
+
+**Personal Info:**
+- Lives in Jersey City, NJ (near the Grove Street PATH)
+- Works as a Sales Director, often has client dinners and flexible hours
+- Divorced, no kids - more schedule flexibility
+- Has a golden retriever named Charlie who needs walking
+
+**Schedule & Availability:**
+- Very flexible schedule but often has last-minute client meetings
+- Prefers not to plan too far in advance (1-2 days ideal)
+- Can do late nights without issue
+- Works out at 6am, so mornings before 9am are tough for social plans
+- Often travels for work (2-3 days per month)
+
+**Food & Dining:**
+- Loves trying new restaurants, especially trendy spots
+- Meat lover - enjoys steakhouses and BBQ
+- Recently trying to eat healthier, but no strict diet
+- Adventurous eater - will try anything once
+- Has a shellfish allergy (serious - needs to avoid cross-contamination)
+- Budget: Happy to spend $60-100/person for good dining experiences
+- Enjoys craft beer and whiskey
+
+**Activities & Interests:**
+- Big sports fan - watches football and basketball regularly
+- Golfs on weekends when weather permits
+- Enjoys live music and concerts
+- Likes hiking but prefers easier trails (not super athletic hikes)
+- Recently got into cooking (watching a lot of YouTube cooking videos)
+- Enjoys poker nights with his friends (monthly)
+
+**Travel & Transportation:**
+- Has a car, happy to drive
+- Loves road trips and spontaneous weekend getaways
+- Prefers beach vacations, has been to Caribbean multiple times
+- Goes to Vegas once a year with college friends
+
+**Social Style:**
+- Extrovert who energizes from social gatherings
+- Enjoys larger group events and parties
+- Tends to be 10-15 minutes late to everything (working on it)
+- Great with small talk, can chat with anyone
+- Sometimes talks over people when excited (aware and trying to improve)
+
+**Logistics with Alice:**
+- Would need to figure out meeting spots between Brooklyn and Jersey City
+- PATH + subway connection works, or can drive to Brooklyn
+- Both enjoy hiking - good shared activity to explore`,
 };
 
 // Single demo room

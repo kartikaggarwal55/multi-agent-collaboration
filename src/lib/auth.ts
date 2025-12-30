@@ -10,16 +10,40 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      // CHANGED: Request offline access for refresh tokens + calendar scope
+      // Request offline access for refresh tokens + calendar + gmail scopes
       authorization: {
         params: {
-          scope: "openid email profile https://www.googleapis.com/auth/calendar.readonly",
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/calendar.readonly",
+            "https://www.googleapis.com/auth/gmail.readonly",
+          ].join(" "),
           access_type: "offline",
-          prompt: "consent", // Force consent to get refresh token
+          prompt: "consent", // Force consent to get refresh token (needed when scopes change)
         },
       },
+      // Allow linking OAuth account to existing user with same email
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
+  // Update existing account on re-auth instead of creating duplicates
+  events: {
+    async linkAccount({ user, account }) {
+      // Delete any older accounts for this user/provider to avoid duplicates
+      // The adapter will create the new one with updated scopes
+      await prisma.account.deleteMany({
+        where: {
+          userId: user.id,
+          provider: account.provider,
+          NOT: {
+            providerAccountId: account.providerAccountId,
+          },
+        },
+      });
+    },
+  },
   callbacks: {
     // CHANGED: Include user ID in session for database queries
     async session({ session, user }) {

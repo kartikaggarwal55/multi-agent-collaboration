@@ -1,4 +1,4 @@
-// CHANGED: API route for private 1:1 assistant chat with streaming and calendar tools
+// API route for private 1:1 assistant chat with streaming, calendar, gmail, and maps tools
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -17,6 +17,17 @@ import {
   executeCalendarTool,
   isCalendarTool,
 } from "@/lib/agents/calendar-tools";
+import {
+  GMAIL_TOOLS,
+  executeGmailTool,
+  isGmailTool,
+} from "@/lib/agents/gmail-tools";
+import {
+  MAPS_TOOLS,
+  executeMapseTool,
+  isMapseTool,
+  isMapsConfigured,
+} from "@/lib/agents/maps-tools";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic();
@@ -49,12 +60,17 @@ export async function GET() {
       getUserProfile(userId),
     ]);
 
-    // CHANGED: Check if user has calendar connected
-    const account = await prisma.account.findFirst({
+    // Check if user has calendar and gmail connected
+    // Find all Google accounts and prefer the one with most scopes
+    const accounts = await prisma.account.findMany({
       where: { userId, provider: "google" },
-      select: { access_token: true },
+      select: { access_token: true, scope: true },
     });
-    const hasCalendar = !!account?.access_token;
+    const account = accounts.find(a => a.scope?.includes("gmail"))
+      || accounts.find(a => a.scope?.includes("calendar"))
+      || accounts[0];
+    const hasCalendar = !!account?.access_token && account?.scope?.includes("calendar");
+    const hasGmail = !!account?.access_token && account?.scope?.includes("gmail");
 
     return new Response(
       JSON.stringify({
@@ -66,6 +82,8 @@ export async function GET() {
         })),
         profile: profileItems,
         hasCalendar,
+        hasGmail,
+        hasMaps: isMapsConfigured(),
         user: {
           name: session.user.name,
           email: session.user.email,
@@ -119,35 +137,57 @@ export async function POST(request: Request) {
     });
 
     // Get profile, recent messages, and calendar status
-    const [profileItems, recentMessages, account] = await Promise.all([
+    // Find all Google accounts and prefer the one with most scopes (gmail + calendar)
+    const [profileItems, recentMessagesDesc, accounts] = await Promise.all([
       getUserProfile(userId),
       prisma.privateMessage.findMany({
         where: { userId },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: "desc" },
         take: 20,
       }),
-      prisma.account.findFirst({
+      prisma.account.findMany({
         where: { userId, provider: "google" },
-        select: { access_token: true },
+        select: { access_token: true, scope: true },
       }),
     ]);
 
-    const hasCalendar = !!account?.access_token;
+    // Prefer account with gmail scope, then calendar, then any
+    const account = accounts.find(a => a.scope?.includes("gmail"))
+      || accounts.find(a => a.scope?.includes("calendar"))
+      || accounts[0];
 
-    // Prepare system prompt
-    const systemPrompt = privateAssistantSystemPrompt(userName, profileItems);
+    const hasCalendar = !!account?.access_token && account?.scope?.includes("calendar");
+    const hasGmail = !!account?.access_token && account?.scope?.includes("gmail");
+
+    // Reverse to chronological order (oldest first)
+    const recentMessages = recentMessagesDesc.reverse();
+
+    // Prepare system prompt with tool availability
+    const systemPrompt = privateAssistantSystemPrompt(
+      userName,
+      profileItems,
+      hasCalendar,
+      hasGmail,
+      isMapsConfigured()
+    );
 
     // Format conversation context
     const conversationContext = formatPrivateConversation(
       recentMessages.map((m) => ({ role: m.role, content: m.content }))
     );
 
-    // CHANGED: Build tools list based on calendar access
+    // Build tools list based on available access
     const tools: Anthropic.Messages.Tool[] = [
       PRIVATE_EMIT_TURN_TOOL as unknown as Anthropic.Messages.Tool,
     ];
     if (hasCalendar) {
       tools.push(...CALENDAR_TOOLS);
+    }
+    if (hasGmail) {
+      tools.push(...GMAIL_TOOLS);
+    }
+    if (isMapsConfigured()) {
+      tools.push(...MAPS_TOOLS);
     }
 
     // Create streaming response
@@ -239,7 +279,7 @@ export async function POST(request: Request) {
                     },
                   };
                 } else if (isCalendarTool(block.name)) {
-                  // CHANGED: Execute calendar tool
+                  // Execute calendar tool
                   sendEvent("status", { status: `Checking calendar...` });
 
                   const toolResult = await executeCalendarTool(
@@ -252,6 +292,39 @@ export async function POST(request: Request) {
                   if (toolResult.includes("needs to be reconnected")) {
                     needsReconnect = true;
                   }
+
+                  toolResults.push({
+                    type: "tool_result",
+                    tool_use_id: block.id,
+                    content: toolResult,
+                  });
+                } else if (isGmailTool(block.name)) {
+                  // Execute Gmail tool
+                  sendEvent("status", { status: `Searching emails...` });
+
+                  const toolResult = await executeGmailTool(
+                    userId,
+                    block.name,
+                    block.input as Record<string, unknown>
+                  );
+
+                  if (toolResult.includes("needs to be reconnected")) {
+                    needsReconnect = true;
+                  }
+
+                  toolResults.push({
+                    type: "tool_result",
+                    tool_use_id: block.id,
+                    content: toolResult,
+                  });
+                } else if (isMapseTool(block.name)) {
+                  // Execute Maps tool
+                  sendEvent("status", { status: `Searching places...` });
+
+                  const toolResult = await executeMapseTool(
+                    block.name,
+                    block.input as Record<string, unknown>
+                  );
 
                   toolResults.push({
                     type: "tool_result",

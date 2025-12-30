@@ -33,6 +33,7 @@ import {
   generateCapReachedHandoff,
   generateStallUnblockQuestion,
 } from "./prompts";
+import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./maps-tools";
 
 // Initialize Anthropic client
 const anthropic = new Anthropic();
@@ -372,7 +373,7 @@ async function callAssistantWithStructuredOutput(
   systemPrompt: string,
   userMessage: string
 ): Promise<{ content: string; citations: Citation[]; meta: TurnMeta | null }> {
-  // CHANGED: Include emit_turn tool alongside web search
+  // Include emit_turn tool alongside web search and maps tools
   const tools: Anthropic.Messages.Tool[] = [
     EMIT_TURN_TOOL as unknown as Anthropic.Messages.Tool,
     {
@@ -382,60 +383,120 @@ async function callAssistantWithStructuredOutput(
     } as unknown as Anthropic.Messages.Tool,
   ];
 
+  // Add maps tools if configured
+  if (isMapsConfigured()) {
+    tools.push(...MAPS_TOOLS);
+  }
+
   let lastError: unknown = null;
+  let messages: Anthropic.Messages.MessageParam[] = [
+    { role: "user", content: userMessage },
+  ];
 
-  // CHANGED: Retry loop for rate limits
-  for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
-    try {
-      const response = await anthropic.messages.create({
-        model: ASSISTANT_MODEL,
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools,
-        tool_choice: { type: "any" },
-        messages: [{ role: "user", content: userMessage }],
-      });
+  // Multi-turn loop to handle tool calls (max 3 rounds)
+  for (let round = 0; round < 3; round++) {
+    // Retry loop for rate limits
+    let response: Anthropic.Messages.Message | null = null;
 
-      return parseStructuredResponse(response);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // CHANGED: Handle web search errors
-      if (errorMessage.includes("web_search")) {
-        console.log("Web search not available, retrying without it");
-        const toolsWithoutWebSearch = [
-          EMIT_TURN_TOOL as unknown as Anthropic.Messages.Tool,
-        ];
-
-        const response = await anthropic.messages.create({
+    for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
+      try {
+        response = await anthropic.messages.create({
           model: ASSISTANT_MODEL,
           max_tokens: 4096,
           system: systemPrompt,
-          tools: toolsWithoutWebSearch,
+          tools,
           tool_choice: { type: "any" },
-          messages: [{ role: "user", content: userMessage }],
+          messages,
         });
+        break;
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
 
-        return parseStructuredResponse(response);
+        // Handle web search errors - retry without web search
+        if (errorMessage.includes("web_search")) {
+          console.log("Web search not available, retrying without it");
+          const toolsWithoutWebSearch = tools.filter(
+            (t) => {
+              if ("name" in t && t.name === "web_search") return false;
+              if ("type" in t && (t as unknown as { type: string }).type === "web_search_20250305") return false;
+              return true;
+            }
+          );
+
+          response = await anthropic.messages.create({
+            model: ASSISTANT_MODEL,
+            max_tokens: 4096,
+            system: systemPrompt,
+            tools: toolsWithoutWebSearch,
+            tool_choice: { type: "any" },
+            messages,
+          });
+          break;
+        }
+
+        // Handle rate limits with retry
+        if (errorMessage.includes("429") || errorMessage.includes("rate_limit")) {
+          lastError = error;
+          if (attempt < MAX_RATE_LIMIT_RETRIES) {
+            const delay = RATE_LIMIT_RETRY_DELAY_MS * Math.pow(2, attempt);
+            console.log(`Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES}`);
+            await sleep(delay);
+            continue;
+          }
+        }
+
+        throw error;
       }
+    }
 
-      // CHANGED: Handle rate limits with retry
-      if (errorMessage.includes("429") || errorMessage.includes("rate_limit")) {
-        lastError = error;
-        if (attempt < MAX_RATE_LIMIT_RETRIES) {
-          const delay = RATE_LIMIT_RETRY_DELAY_MS * Math.pow(2, attempt); // Exponential backoff
-          console.log(`Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${MAX_RATE_LIMIT_RETRIES}`);
-          await sleep(delay);
-          continue;
+    if (!response) {
+      throw lastError || new Error("Failed to get response from API");
+    }
+
+    // Check if we have maps tool calls to execute
+    const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
+    let hasEmitTurn = false;
+
+    for (const block of response.content) {
+      if (block.type === "tool_use") {
+        if (block.name === "emit_turn") {
+          hasEmitTurn = true;
+        } else if (isMapseTool(block.name)) {
+          // Execute maps tool
+          const toolResult = await executeMapseTool(
+            block.name,
+            block.input as Record<string, unknown>
+          );
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: toolResult,
+          });
         }
       }
-
-      throw error;
     }
+
+    // If we have emit_turn, we're done - parse and return
+    if (hasEmitTurn) {
+      return parseStructuredResponse(response);
+    }
+
+    // If we have tool results, continue the conversation
+    if (toolResults.length > 0) {
+      messages = [
+        ...messages,
+        { role: "assistant", content: response.content },
+        { role: "user", content: toolResults },
+      ];
+      continue;
+    }
+
+    // No emit_turn and no tool results - parse what we have
+    return parseStructuredResponse(response);
   }
 
-  // If we exhausted retries, throw the last error
-  throw lastError;
+  // If we exhausted rounds, throw error
+  throw new Error("Max tool call rounds exceeded");
 }
 
 /**

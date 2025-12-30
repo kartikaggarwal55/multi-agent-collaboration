@@ -31,13 +31,16 @@ type OAuth2Result =
  * CHANGED: Get OAuth2 client with user's tokens
  */
 async function getOAuth2Client(userId: string): Promise<OAuth2Result> {
-  // Get user's Google account
-  const account = await prisma.account.findFirst({
+  // Get user's Google accounts and prefer one with calendar scope
+  const accounts = await prisma.account.findMany({
     where: {
       userId,
       provider: "google",
     },
   });
+
+  // Prefer account with calendar scope
+  const account = accounts.find(a => a.scope?.includes("calendar")) || accounts[0];
 
   if (!account) {
     return { error: "No Google account connected", needsReconnect: true };

@@ -59,17 +59,21 @@ export async function GET(
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
-    // Check which members have calendar connected
+    // Check which members have calendar and gmail connected
     const memberUserIds = group.members.map((m) => m.userId);
     const accounts = await prisma.account.findMany({
       where: {
         userId: { in: memberUserIds },
         provider: "google",
-        scope: { contains: "calendar" },
       },
-      select: { userId: true },
+      select: { userId: true, scope: true },
     });
-    const usersWithCalendar = new Set(accounts.map((a) => a.userId));
+    const usersWithCalendar = new Set(
+      accounts.filter((a) => a.scope?.includes("calendar")).map((a) => a.userId)
+    );
+    const usersWithGmail = new Set(
+      accounts.filter((a) => a.scope?.includes("gmail")).map((a) => a.userId)
+    );
 
     // Build participants list (users + their assistants)
     const participants = [];
@@ -81,6 +85,7 @@ export async function GET(
         displayName: member.user.name || member.user.email || "User",
         image: member.user.image,
         hasCalendar: usersWithCalendar.has(member.userId),
+        hasGmail: usersWithGmail.has(member.userId),
       });
       // Add assistant participant
       participants.push({
@@ -89,6 +94,7 @@ export async function GET(
         displayName: `${member.user.name?.split(" ")[0] || "User"}'s Assistant`,
         ownerHumanId: member.userId,
         hasCalendar: usersWithCalendar.has(member.userId),
+        hasGmail: usersWithGmail.has(member.userId),
       });
     }
 

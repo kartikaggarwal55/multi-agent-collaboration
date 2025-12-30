@@ -195,9 +195,14 @@ ${openQuestionsSection}
    - If you and ${otherAssistantName} have aligned on a solid plan → HANDOFF_DONE
    - If more assistant discussion is productive → CONTINUE
 
-6. **Use web search when helpful**: For current info (restaurants, events, reviews), search. Be specific.
+6. **Use tools when helpful**:
+   - **Maps search**: Search for places, restaurants, venues - always include Google Maps links
+   - **Web search**: For current info, events, reviews when maps doesn't cover it
+   - Be specific in queries
 
 7. **Be concise but warm**: 2-4 sentences per point. No walls of text.
+
+8. **Always include links**: When mentioning places or venues, include clickable Google Maps links inline.
 
 ## REQUIRED: Structured Output
 

@@ -89,17 +89,21 @@ export async function POST(
       },
     });
 
-    // Check which members have calendar connected
+    // Check which members have calendar and gmail connected
     const memberUserIds = group.members.map((m) => m.userId);
     const accounts = await prisma.account.findMany({
       where: {
         userId: { in: memberUserIds },
         provider: "google",
-        scope: { contains: "calendar" },
       },
-      select: { userId: true },
+      select: { userId: true, scope: true },
     });
-    const usersWithCalendar = new Set(accounts.map((a) => a.userId));
+    const usersWithCalendar = new Set(
+      accounts.filter((a) => a.scope?.includes("calendar")).map((a) => a.userId)
+    );
+    const usersWithGmail = new Set(
+      accounts.filter((a) => a.scope?.includes("gmail")).map((a) => a.userId)
+    );
 
     // Build participants list
     const participants: GroupParticipant[] = [];
@@ -111,6 +115,7 @@ export async function POST(
         displayName: member.user.name || member.user.email || "User",
         userId: member.userId,
         hasCalendar: usersWithCalendar.has(member.userId),
+        hasGmail: usersWithGmail.has(member.userId),
       });
       // Assistant participant
       participants.push({
@@ -120,6 +125,7 @@ export async function POST(
         ownerHumanId: member.userId,
         userId: member.userId,
         hasCalendar: usersWithCalendar.has(member.userId),
+        hasGmail: usersWithGmail.has(member.userId),
       });
     }
 
@@ -174,10 +180,18 @@ export async function POST(
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
+        let isClosed = false;
+
         const sendEvent = (event: string, data: unknown) => {
-          controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-          );
+          if (isClosed) return; // Guard against sending after close
+          try {
+            controller.enqueue(
+              encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+            );
+          } catch (e) {
+            // Controller may be closed, ignore
+            console.warn("Failed to send SSE event:", e);
+          }
         };
 
         try {
@@ -242,6 +256,7 @@ export async function POST(
           });
           sendEvent("done", { stopReason: "ERROR" });
         } finally {
+          isClosed = true;
           controller.close();
         }
       },

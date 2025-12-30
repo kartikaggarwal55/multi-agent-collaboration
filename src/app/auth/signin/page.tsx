@@ -35,7 +35,7 @@ export default async function SignInPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-[oklch(0.97_0.02_260)]">
       <div className="w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[oklch(0.55_0.18_280)] to-[oklch(0.50_0.20_300)] flex items-center justify-center shadow-lg">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-[oklch(0.65_0.15_55)] to-[oklch(0.60_0.14_50)] flex items-center justify-center shadow-lg">
             <svg
               width="32"
               height="32"
@@ -67,7 +67,7 @@ export default async function SignInPage() {
           >
             <button
               type="submit"
-              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border/50 bg-card hover:bg-muted/50 transition-colors font-medium"
+              className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border border-border/50 bg-card hover:bg-[oklch(0.65_0.15_55)] hover:text-white hover:border-[oklch(0.65_0.15_55)] transition-colors font-medium"
             >
               <GoogleIcon />
               Continue with Google
@@ -94,7 +94,7 @@ export default async function SignInPage() {
         <div className="mt-8 pt-6 border-t border-border/30 text-center">
           <a
             href="/"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm text-muted-foreground hover:text-[oklch(0.65_0.15_55)] transition-colors"
           >
             ← Back to Collaboration Room
           </a>

@@ -68,10 +68,29 @@ function getCurrentDateTime(): string {
 // System prompt for private assistant
 export function privateAssistantSystemPrompt(
   userName: string,
-  profileItems: string[]
+  profileItems: string[],
+  hasCalendar: boolean = false,
+  hasGmail: boolean = false,
+  hasMaps: boolean = false
 ): string {
   const profileSection = formatProfileForPrompt(profileItems);
   const currentDateTime = getCurrentDateTime();
+
+  // Build tools section dynamically
+  const toolsList: string[] = [];
+  if (hasCalendar) {
+    toolsList.push("- **Calendar**: Check availability and schedule when discussing timing");
+  }
+  if (hasGmail) {
+    toolsList.push("- **Gmail**: Search for emails about reservations, confirmations, travel plans, receipts. Always include [Open in Gmail](url) links");
+  }
+  if (hasMaps) {
+    toolsList.push("- **Maps**: Search for places, restaurants, venues. Always include Google Maps links");
+  }
+
+  const toolsSection = toolsList.length > 0
+    ? `5. **Use available tools**:\n${toolsList.join("\n")}`
+    : "5. You don't have any external tools connected yet. Suggest the user connect Calendar/Gmail in settings if relevant.";
 
   return `You are ${userName}'s personal AI assistant. Your primary goals are:
 1. Learn about ${userName}'s preferences, schedule, and needs over time
@@ -116,7 +135,14 @@ You must learn and remember information about ${userName} by updating their prof
 2. **Ask clarifying questions sparingly** - Only when needed to help or update profile
 3. **Don't latch onto old preferences** - Latest explicit user intent is authoritative
 4. **Help with planning** - When asked about scheduling, be proactive and helpful
-5. **Use available tools** - Calendar access is available for scheduling help
+${toolsSection}
+
+## Link Guidelines
+When using external information from tools:
+- Include inline markdown links for all places, emails, and calendar events
+${hasGmail ? '- For emails: "Found your [confirmation from Delta](gmail-link)"' : ''}
+${hasMaps ? '- For places: "How about [The Blue Cafe](maps-link) - it has great reviews"' : ''}
+- Keep links concise and natural in the conversation
 
 ## REQUIRED Output
 

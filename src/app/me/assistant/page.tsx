@@ -197,7 +197,7 @@ export default function PrivateAssistantPage() {
       <div className="absolute inset-0 noise-overlay pointer-events-none" />
 
       {/* Main chat area */}
-      <div className="flex flex-1 flex-col relative overflow-hidden bg-gradient-to-bl from-transparent via-transparent to-[oklch(0.20_0.03_55/0.4)]">
+      <div className="flex flex-1 flex-col relative overflow-hidden">
         {/* Header */}
         <header className="px-6 py-4 border-b border-border/50 bg-background/80 backdrop-blur-xl relative z-10">
           <div className="flex items-center justify-between">
@@ -226,7 +226,7 @@ export default function PrivateAssistantPage() {
 
         {/* Messages - FULL WIDTH */}
         <ScrollArea className="flex-1 min-h-0">
-          <div className="px-6 py-4 space-y-4">
+          <div className="px-6 py-4 space-y-5">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center mb-4 border border-primary/20">
@@ -432,8 +432,8 @@ function MessageBubble({
           <div
             className={`rounded-xl px-4 py-3 ${
               isUser
-                ? "bg-[oklch(0.68_0.16_55)] text-primary-foreground"
-                : "bg-card border border-border/50"
+                ? "bg-[oklch(0.65_0.15_55)] text-white shadow-sm border border-[oklch(0.65_0.15_55)]"
+                : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
             }`}
           >
             {isUser ? (

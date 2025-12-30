@@ -109,6 +109,89 @@ interface Participant {
   hasCalendar?: boolean;
 }
 
+// Parse and style @mentions in message content
+function renderMentions(
+  content: string,
+  currentUserName: string | null | undefined,
+  participants: Participant[]
+): React.ReactNode[] {
+  // Match @Name or @Name's patterns
+  const mentionRegex = /@(\w+(?:'s)?(?:\s+\w+)?)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = mentionRegex.exec(content)) !== null) {
+    // Add text before the mention
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+
+    const mentionText = match[0]; // e.g., "@Kartik" or "@Kartik's Assistant"
+    const mentionName = match[1]; // e.g., "Kartik" or "Kartik's Assistant"
+
+    // Check if this mention is for the current user
+    const isCurrentUser = currentUserName && (
+      mentionName.toLowerCase().includes(currentUserName.toLowerCase().split(' ')[0]) ||
+      currentUserName.toLowerCase().includes(mentionName.toLowerCase().split("'")[0])
+    );
+
+    // Check if it's a valid participant
+    const isValidMention = participants.some(p =>
+      p.displayName.toLowerCase().includes(mentionName.toLowerCase().split("'")[0]) ||
+      mentionName.toLowerCase().includes(p.displayName.toLowerCase().split(' ')[0])
+    );
+
+    if (isValidMention) {
+      parts.push(
+        <span
+          key={match.index}
+          className={`font-semibold px-1 py-0.5 rounded ${
+            isCurrentUser
+              ? 'bg-primary/20 text-primary border border-primary/30'
+              : 'bg-foreground/10 text-foreground/80'
+          }`}
+        >
+          {mentionText}
+        </span>
+      );
+    } else {
+      parts.push(mentionText);
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [content];
+}
+
+// Helper to handle ReactMarkdown children (can be string, element, or array)
+function renderMentionsInChildren(
+  children: React.ReactNode,
+  currentUserName: string | null | undefined,
+  participants: Participant[]
+): React.ReactNode {
+  if (typeof children === 'string') {
+    return renderMentions(children, currentUserName, participants);
+  }
+
+  if (Array.isArray(children)) {
+    return children.map((child, i) => {
+      if (typeof child === 'string') {
+        return <span key={i}>{renderMentions(child, currentUserName, participants)}</span>;
+      }
+      return child;
+    });
+  }
+
+  return children;
+}
+
 interface Message {
   id: string;
   groupId: string;
@@ -130,21 +213,21 @@ interface GroupData {
   createdBy?: { id: string; name: string | null };
 }
 
-// Generate consistent colors for participants
+// Generate consistent colors for participants - Orange, black, white scheme
 const PARTICIPANT_COLORS = [
-  { bg: "bg-[oklch(0.72_0.18_330)]", text: "text-white", border: "border-[oklch(0.72_0.18_330)]" },
-  { bg: "bg-[oklch(0.68_0.14_200)]", text: "text-white", border: "border-[oklch(0.68_0.14_200)]" },
-  { bg: "bg-[oklch(0.70_0.15_140)]", text: "text-white", border: "border-[oklch(0.70_0.15_140)]" },
-  { bg: "bg-[oklch(0.65_0.12_280)]", text: "text-white", border: "border-[oklch(0.65_0.12_280)]" },
-  { bg: "bg-[oklch(0.68_0.16_55)]", text: "text-white", border: "border-[oklch(0.68_0.16_55)]" },
+  { bg: "bg-[oklch(0.65_0.15_55)]", text: "text-white", border: "border-[oklch(0.65_0.15_55)]" }, // Orange
+  { bg: "bg-[oklch(0.60_0.14_50)]", text: "text-white", border: "border-[oklch(0.60_0.14_50)]" }, // Darker orange
+  { bg: "bg-[oklch(0.70_0.16_60)]", text: "text-white", border: "border-[oklch(0.70_0.16_60)]" }, // Lighter orange
+  { bg: "bg-[oklch(0.55_0.13_45)]", text: "text-white", border: "border-[oklch(0.55_0.13_45)]" }, // Deep orange
+  { bg: "bg-[oklch(0.68_0.15_58)]", text: "text-white", border: "border-[oklch(0.68_0.15_58)]" }, // Warm orange
 ];
 
 const ASSISTANT_COLORS = [
-  { bg: "bg-[oklch(0.28_0.08_330)]", text: "text-[oklch(0.85_0.12_330)]", border: "border-[oklch(0.40_0.10_330)]" },
-  { bg: "bg-[oklch(0.26_0.06_200)]", text: "text-[oklch(0.82_0.10_200)]", border: "border-[oklch(0.38_0.08_200)]" },
-  { bg: "bg-[oklch(0.27_0.07_140)]", text: "text-[oklch(0.83_0.11_140)]", border: "border-[oklch(0.39_0.09_140)]" },
-  { bg: "bg-[oklch(0.25_0.05_280)]", text: "text-[oklch(0.80_0.08_280)]", border: "border-[oklch(0.37_0.07_280)]" },
-  { bg: "bg-[oklch(0.27_0.07_55)]", text: "text-[oklch(0.82_0.10_55)]", border: "border-[oklch(0.39_0.09_55)]" },
+  { bg: "bg-[oklch(0.25_0.02_55)]", text: "text-[oklch(0.70_0.12_55)]", border: "border-[oklch(0.35_0.03_55)]" },
+  { bg: "bg-[oklch(0.25_0.02_50)]", text: "text-[oklch(0.70_0.12_50)]", border: "border-[oklch(0.35_0.03_50)]" },
+  { bg: "bg-[oklch(0.25_0.02_60)]", text: "text-[oklch(0.70_0.12_60)]", border: "border-[oklch(0.35_0.03_60)]" },
+  { bg: "bg-[oklch(0.25_0.02_45)]", text: "text-[oklch(0.70_0.12_45)]", border: "border-[oklch(0.35_0.03_45)]" },
+  { bg: "bg-[oklch(0.25_0.02_58)]", text: "text-[oklch(0.70_0.12_58)]", border: "border-[oklch(0.35_0.03_58)]" },
 ];
 
 export default function GroupPage({
@@ -401,7 +484,7 @@ export default function GroupPage({
       <div className="absolute inset-0 noise-overlay pointer-events-none" />
 
       {/* Main chat area */}
-      <div className="flex flex-1 flex-col relative overflow-hidden bg-gradient-to-bl from-transparent via-transparent to-[oklch(0.20_0.03_55/0.4)]">
+      <div className="flex flex-1 flex-col relative overflow-hidden">
         {/* Header */}
         <header className="px-6 py-4 border-b border-border/50 bg-background/80 backdrop-blur-xl relative z-10">
           <div className="flex items-center justify-between">
@@ -469,7 +552,7 @@ export default function GroupPage({
 
         {/* Messages */}
         <ScrollArea className="flex-1 min-h-0">
-          <div className="px-6 py-4 space-y-3">
+          <div className="px-6 py-4 space-y-4">
             {group.messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mb-4 border border-border/50">
@@ -505,14 +588,14 @@ export default function GroupPage({
                     </Avatar>
 
                     <div className={`flex flex-col ${alignRight ? "items-end" : "items-start"}`}>
-                      <div className={`flex items-center gap-2 mb-1 ${alignRight ? "flex-row-reverse" : ""}`}>
-                        <span className="text-xs font-medium">{msg.authorName}</span>
+                      <div className={`flex items-center gap-2 mb-1.5 ${alignRight ? "flex-row-reverse" : ""}`}>
+                        <span className="text-xs font-medium text-foreground/90">{msg.authorName}</span>
                         {msg.role === "assistant" && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground border border-border/50">
                             AI
                           </span>
                         )}
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground/70">
                           {formatTime(msg.createdAt)}
                         </span>
                       </div>
@@ -520,8 +603,8 @@ export default function GroupPage({
                       <div
                         className={`rounded-xl px-4 py-3 ${
                           alignRight
-                            ? `${colors.bg} ${colors.text}`
-                            : "bg-card border border-border/50"
+                            ? `${colors.bg} ${colors.text} shadow-sm border ${colors.border}`
+                            : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
                         }`}
                       >
                         {msg.role === "assistant" ? (
@@ -529,7 +612,9 @@ export default function GroupPage({
                             <ReactMarkdown
                               components={{
                                 p: ({ children }) => (
-                                  <p className="text-sm mb-2 last:mb-0 leading-relaxed">{children}</p>
+                                  <p className="text-sm mb-2 last:mb-0 leading-relaxed">
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </p>
                                 ),
                                 ul: ({ children }) => (
                                   <ul className="text-sm list-none pl-0 mb-2 space-y-1.5">{children}</ul>
@@ -537,8 +622,18 @@ export default function GroupPage({
                                 li: ({ children }) => (
                                   <li className="text-sm leading-relaxed flex items-start gap-2">
                                     <span className="w-1 h-1 rounded-full bg-primary/60 mt-2 shrink-0" />
-                                    <span>{children}</span>
+                                    <span>{renderMentionsInChildren(children, session.user?.name, group.participants)}</span>
                                   </li>
+                                ),
+                                a: ({ href, children }) => (
+                                  <a
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                                  >
+                                    {children}
+                                  </a>
                                 ),
                               }}
                             >
@@ -546,7 +641,9 @@ export default function GroupPage({
                             </ReactMarkdown>
                           </div>
                         ) : (
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {renderMentions(msg.content, session.user?.name, group.participants)}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -704,6 +801,21 @@ function StatePanel({
         </div>
       )}
 
+      {/* Next Steps - Action items */}
+      {canonicalState.suggestedNextSteps && canonicalState.suggestedNextSteps.length > 0 && (
+        <div>
+          <SectionHeader accent>Next Steps</SectionHeader>
+          <ol className="space-y-2">
+            {canonicalState.suggestedNextSteps.map((step, i) => (
+              <li key={i} className="flex items-baseline gap-2.5 text-[13px] leading-[1.5]">
+                <span className="w-5 h-5 rounded-md bg-primary/10 text-primary font-mono text-[11px] flex items-center justify-center shrink-0">{i + 1}</span>
+                <span className="text-foreground/80">{step}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+
       {/* Progress */}
       {canonicalState.statusSummary && canonicalState.statusSummary.length > 0 && (
         <div>
@@ -735,21 +847,6 @@ function StatePanel({
               );
             })}
           </ul>
-        </div>
-      )}
-
-      {/* Next Steps */}
-      {canonicalState.suggestedNextSteps && canonicalState.suggestedNextSteps.length > 0 && (
-        <div>
-          <SectionHeader>Next Steps</SectionHeader>
-          <ol className="space-y-2">
-            {canonicalState.suggestedNextSteps.map((step, i) => (
-              <li key={i} className="flex items-baseline gap-2.5 text-[13px] leading-[1.5]">
-                <span className="text-primary font-mono text-[12px] tabular-nums">{i + 1}</span>
-                <span className="text-foreground/70">{step}</span>
-              </li>
-            ))}
-          </ol>
         </div>
       )}
 
