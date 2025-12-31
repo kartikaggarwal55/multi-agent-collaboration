@@ -557,17 +557,19 @@ export default function GroupPage({
         </header>
 
         {/* Goal input */}
-        <div className="px-6 py-3 border-b border-border/30 bg-card/30">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-muted-foreground shrink-0">
-              <TargetIcon />
-              <span className="text-xs font-medium uppercase tracking-wider">Goal</span>
+        <div className="px-6 py-4 border-b border-border/30 goal-section">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2.5 text-primary shrink-0">
+              <div className="p-1.5 rounded-md bg-primary/10">
+                <TargetIcon />
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wider">Goal</span>
             </div>
             <Input
               placeholder="What are we planning today?"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
-              className="flex-1 h-10 bg-background/50 border-border/50 rounded-lg text-sm"
+              className="flex-1 h-11 bg-background/60 border-border/50 rounded-lg text-[15px] font-medium placeholder:text-muted-foreground/50"
             />
           </div>
         </div>
@@ -577,11 +579,16 @@ export default function GroupPage({
           <div className="px-6 py-4 space-y-4">
             {group.messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center mb-4 border border-border/50">
-                  <SparklesIcon />
+                <div className="relative">
+                  <div className="absolute inset-0 empty-state-glow scale-150" />
+                  <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center mb-6 border border-primary/20 shadow-lg">
+                    <SparklesIcon />
+                  </div>
                 </div>
-                <p className="text-muted-foreground text-sm font-medium">Ready to collaborate</p>
-                <p className="text-muted-foreground/60 text-xs mt-1">Set a goal and start the conversation</p>
+                <h3 className="text-foreground font-semibold text-lg mb-2">Ready to collaborate</h3>
+                <p className="text-muted-foreground text-[15px] max-w-xs leading-relaxed">
+                  Set a goal above and send your first message to begin planning together
+                </p>
               </div>
             )}
 
@@ -626,7 +633,9 @@ export default function GroupPage({
                         className={`rounded-xl px-4 py-3 ${
                           alignRight
                             ? `${colors.bg} ${colors.text} shadow-sm border ${colors.border}`
-                            : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
+                            : msg.role === "assistant"
+                              ? "bg-card/90 border border-border/50 shadow-sm backdrop-blur-sm message-ai"
+                              : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
                         }`}
                       >
                         {msg.role === "assistant" ? (
@@ -634,16 +643,16 @@ export default function GroupPage({
                             <ReactMarkdown
                               components={{
                                 p: ({ children }) => (
-                                  <p className="text-sm mb-2 last:mb-0 leading-relaxed">
+                                  <p className="text-[15px] mb-2.5 last:mb-0 leading-[1.65] text-foreground/90">
                                     {renderMentionsInChildren(children, session.user?.name, group.participants)}
                                   </p>
                                 ),
                                 ul: ({ children }) => (
-                                  <ul className="text-sm list-none pl-0 mb-2 space-y-1.5">{children}</ul>
+                                  <ul className="text-[15px] list-none pl-0 mb-2.5 space-y-2">{children}</ul>
                                 ),
                                 li: ({ children }) => (
-                                  <li className="text-sm leading-relaxed flex items-start gap-2">
-                                    <span className="w-1 h-1 rounded-full bg-primary/60 mt-2 shrink-0" />
+                                  <li className="text-[15px] leading-[1.65] flex items-start gap-2.5 text-foreground/90">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-[9px] shrink-0" />
                                     <span>{renderMentionsInChildren(children, session.user?.name, group.participants)}</span>
                                   </li>
                                 ),
@@ -652,7 +661,7 @@ export default function GroupPage({
                                     href={href}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors"
+                                    className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors font-medium"
                                   >
                                     {children}
                                   </a>
@@ -663,7 +672,7 @@ export default function GroupPage({
                             </ReactMarkdown>
                           </div>
                         ) : (
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                          <p className="text-[15px] whitespace-pre-wrap leading-[1.65] text-foreground/95">
                             {renderMentions(msg.content, session.user?.name, group.participants)}
                           </p>
                         )}
@@ -802,21 +811,21 @@ function StatePanel({
 
   // Section header component for consistency
   const SectionHeader = ({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) => (
-    <div className="flex items-center gap-2 mb-3">
-      <span className={`text-[11px] font-semibold uppercase tracking-[0.15em] ${accent ? 'text-primary' : 'text-foreground/50'}`}>
+    <div className="flex items-center gap-3 mb-4">
+      <span className={`text-[12px] font-semibold uppercase tracking-[0.12em] ${accent ? 'text-primary' : 'text-foreground/40'}`}>
         {children}
       </span>
-      <div className={`flex-1 h-[1px] ${accent ? 'bg-primary/20' : 'bg-border/50'}`} />
+      <div className={`flex-1 h-[1px] ${accent ? 'bg-primary/30' : 'bg-border/40'}`} />
     </div>
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {/* Current Plan - Hero Section */}
       {canonicalState.leadingOption && (
-        <div>
+        <div className="pb-1">
           <SectionHeader accent>Current Plan</SectionHeader>
-          <p className="text-[14px] leading-[1.6] text-foreground/90 font-medium">
+          <p className="text-[15px] leading-[1.7] text-foreground font-medium">
             {canonicalState.leadingOption}
           </p>
         </div>
@@ -826,11 +835,11 @@ function StatePanel({
       {canonicalState.suggestedNextSteps && canonicalState.suggestedNextSteps.length > 0 && (
         <div>
           <SectionHeader accent>Next Steps</SectionHeader>
-          <ol className="space-y-2">
+          <ol className="space-y-3">
             {canonicalState.suggestedNextSteps.map((step, i) => (
-              <li key={i} className="flex items-baseline gap-2.5 text-[13px] leading-[1.5]">
-                <span className="w-5 h-5 rounded-md bg-primary/10 text-primary font-mono text-[11px] flex items-center justify-center shrink-0">{i + 1}</span>
-                <span className="text-foreground/80">{step}</span>
+              <li key={i} className="flex items-start gap-3 text-[14px] leading-[1.6]">
+                <span className="w-6 h-6 rounded-lg bg-primary/15 text-primary font-semibold text-[12px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                <span className="text-foreground/85">{step}</span>
               </li>
             ))}
           </ol>
@@ -841,11 +850,11 @@ function StatePanel({
       {canonicalState.statusSummary && canonicalState.statusSummary.length > 0 && (
         <div>
           <SectionHeader>Progress</SectionHeader>
-          <ul className="space-y-2 list-none">
+          <ul className="space-y-2.5 list-none">
             {canonicalState.statusSummary.map((item, i) => (
-              <li key={i} className="flex items-baseline gap-2.5 text-[13px] text-foreground/60 leading-[1.5]">
-                <span className="w-[3px] h-[3px] rounded-full bg-foreground/30 mt-[7px] shrink-0" />
-                {item}
+              <li key={i} className="flex items-start gap-3 text-[14px] text-foreground/60 leading-[1.6]">
+                <CheckIcon />
+                <span className="flex-1">{item}</span>
               </li>
             ))}
           </ul>
@@ -856,14 +865,14 @@ function StatePanel({
       {sessionConstraints.length > 0 && (
         <div>
           <SectionHeader>Constraints</SectionHeader>
-          <ul className="space-y-2 list-none">
+          <ul className="space-y-2.5 list-none">
             {sessionConstraints.map((c, i) => {
               // Strip any leading dash/bullet from constraint text
               const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
               return (
-                <li key={i} className="flex items-baseline gap-2.5 text-[13px] text-foreground/60 leading-[1.5]">
-                  <span className="w-[3px] h-[3px] rounded-full bg-foreground/30 mt-[7px] shrink-0" />
-                  {constraintText}
+                <li key={i} className="flex items-start gap-3 text-[14px] text-foreground/55 leading-[1.6]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-foreground/25 mt-[9px] shrink-0" />
+                  <span className="flex-1">{constraintText}</span>
                 </li>
               );
             })}
@@ -872,27 +881,27 @@ function StatePanel({
       )}
 
       {/* Participants */}
-      <div className="pt-5 mt-5 border-t border-border/40">
+      <div className="pt-6 mt-6 border-t border-border/30">
         <SectionHeader>Participants</SectionHeader>
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-2.5">
           {participants.map((p) => {
             const isAI = p.kind === "assistant";
             return (
               <div
                 key={p.id}
-                className="flex items-center gap-3 py-1.5"
+                className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-foreground/5 transition-colors -mx-3"
               >
-                <Avatar className="h-6 w-6 border border-border/50">
+                <Avatar className={`h-7 w-7 border ${isAI ? 'border-primary/30' : 'border-border/50'}`}>
                   {p.image ? <AvatarImage src={p.image} /> : null}
-                  <AvatarFallback className={`text-[10px] font-semibold ${isAI ? 'bg-primary/10 text-primary' : 'bg-foreground/10 text-foreground/70'}`}>
+                  <AvatarFallback className={`text-[11px] font-semibold ${isAI ? 'bg-primary/10 text-primary' : 'bg-foreground/10 text-foreground/70'}`}>
                     {getInitials(p.displayName)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <span className="text-[13px] text-foreground/80 truncate block">{p.displayName}</span>
+                  <span className="text-[14px] text-foreground/85 truncate block">{p.displayName}</span>
                 </div>
                 {isAI && (
-                  <span className="text-[10px] font-medium text-primary/60 uppercase tracking-wider">AI</span>
+                  <span className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider bg-primary/10 px-1.5 py-0.5 rounded">AI</span>
                 )}
                 {p.hasCalendar && (
                   <CalendarIcon />

@@ -175,8 +175,14 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Geist', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
   }
-  
+
+  /* Typographic scale - Major Third (1.25) */
+  /* 12px, 15px, 19px, 24px, 30px */
+
   /* Cursor pointer for all interactive elements */
   button,
   [role="button"],
@@ -189,7 +195,7 @@
   select {
     cursor: pointer;
   }
-  
+
   /* Disable cursor for disabled buttons */
   button:disabled,
   [role="button"][aria-disabled="true"],
@@ -376,4 +382,79 @@
   background: inherit;
   opacity: 0.4;
   animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+/* AI Message distinction */
+.message-ai {
+  position: relative;
+  border-left: 2px solid oklch(0.75 0.14 55 / 0.4);
+}
+
+.message-ai::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, oklch(0.75 0.14 55 / 0.03), transparent 50%);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Goal input emphasis */
+.goal-section {
+  background: linear-gradient(
+    135deg,
+    oklch(0.75 0.14 55 / 0.05),
+    oklch(0.75 0.14 55 / 0.02) 50%,
+    transparent
+  );
+}
+
+.light .goal-section {
+  background: linear-gradient(
+    135deg,
+    oklch(0.55 0.14 55 / 0.08),
+    oklch(0.55 0.14 55 / 0.03) 50%,
+    transparent
+  );
+}
+
+/* Section label style */
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.015 250);
+}
+
+.light .section-label {
+  color: oklch(0.45 0.02 250);
+}
+
+/* Empty state illustration */
+.empty-state-glow {
+  background: radial-gradient(
+    ellipse at center,
+    oklch(0.75 0.14 55 / 0.15),
+    transparent 70%
+  );
+}
+
+/* Better focus states */
+input:focus, textarea:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px oklch(0.75 0.14 55 / 0.3);
+}
+
+/* Participant avatar ring for humans */
+.avatar-human {
+  box-shadow: 0 0 0 2px oklch(0.75 0.14 55 / 0.2);
+}
+
+/* Smooth transitions for all interactive elements */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
