@@ -1,7 +1,6 @@
-// CHANGED: Prisma client singleton with LibSQL adapter for Prisma 7.x
+// Prisma client singleton with Neon serverless adapter
 import { PrismaClient } from "@prisma/client";
-import { PrismaLibSql } from "@prisma/adapter-libsql";
-import path from "path";
+import { PrismaNeon } from "@prisma/adapter-neon";
 
 // Prevent multiple instances during hot reload in development
 const globalForPrisma = globalThis as unknown as {
@@ -9,13 +8,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  // CHANGED: Create Prisma adapter with absolute path to SQLite file (in project root)
-  const dbPath = path.join(process.cwd(), "dev.db");
-  const adapter = new PrismaLibSql({
-    url: `file:${dbPath}`,
-  });
+  // Create Prisma client with Neon adapter
+  const connectionString = process.env.DATABASE_URL!;
+  const adapter = new PrismaNeon({ connectionString });
 
-  // CHANGED: Create Prisma client with adapter
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
