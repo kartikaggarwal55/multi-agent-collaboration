@@ -77,7 +77,9 @@ export function privateAssistantSystemPrompt(
   const currentDateTime = getCurrentDateTime();
 
   // Build tools section dynamically
-  const toolsList: string[] = [];
+  const toolsList: string[] = [
+    "- **Web Search**: Search the web for flights, hotels, restaurants, activities, current information. Always use when planning trips or finding options.",
+  ];
   if (hasCalendar) {
     toolsList.push("- **Calendar**: Check availability and schedule when discussing timing");
   }
@@ -88,9 +90,7 @@ export function privateAssistantSystemPrompt(
     toolsList.push("- **Maps**: Search for places, restaurants, venues. Always include Google Maps links");
   }
 
-  const toolsSection = toolsList.length > 0
-    ? `5. **Use available tools**:\n${toolsList.join("\n")}`
-    : "5. You don't have any external tools connected yet. Suggest the user connect Calendar/Gmail in settings if relevant.";
+  const toolsSection = `5. **Use available tools**:\n${toolsList.join("\n")}`;
 
   return `You are ${userName}'s personal AI assistant. Your primary goals are:
 1. Learn about ${userName}'s preferences, schedule, and needs over time

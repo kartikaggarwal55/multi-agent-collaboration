@@ -39,8 +39,12 @@ export async function POST(
     const body = await request.json();
     const { content, goal } = body;
 
+    const MAX_MESSAGE_LENGTH = 10000;
     if (!content?.trim()) {
       return NextResponse.json({ error: "Content required" }, { status: 400 });
+    }
+    if (content.length > MAX_MESSAGE_LENGTH) {
+      return NextResponse.json({ error: "Message too long (max 10,000 characters)" }, { status: 400 });
     }
 
     // Get group with members

@@ -115,8 +115,8 @@ function renderMentions(
   currentUserName: string | null | undefined,
   participants: Participant[]
 ): React.ReactNode[] {
-  // Match @Name or @Name's patterns
-  const mentionRegex = /@(\w+(?:'s)?(?:\s+\w+)?)/g;
+  // Match @Name, @First Last, or @Name's Assistant - Unicode-aware
+  const mentionRegex = /@([\p{L}\p{N}]+(?:(?:'s)?\s+[\p{L}\p{N}]+)*)/gu;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match;
@@ -127,20 +127,25 @@ function renderMentions(
       parts.push(content.slice(lastIndex, match.index));
     }
 
-    const mentionText = match[0]; // e.g., "@Kartik" or "@Kartik's Assistant"
-    const mentionName = match[1]; // e.g., "Kartik" or "Kartik's Assistant"
+    const mentionText = match[0]; // e.g., "@Kartik Aggarwal" or "@Kartik's Assistant"
+    const mentionName = match[1]; // e.g., "Kartik Aggarwal" or "Kartik's Assistant"
 
-    // Check if this mention is for the current user
-    const isCurrentUser = currentUserName && (
-      mentionName.toLowerCase().includes(currentUserName.toLowerCase().split(' ')[0]) ||
-      currentUserName.toLowerCase().includes(mentionName.toLowerCase().split("'")[0])
+    // Check if this mention matches the current user (not their assistant)
+    const mentionLower = mentionName.toLowerCase();
+    const userNameLower = currentUserName?.toLowerCase() || '';
+    const isAssistantMention = mentionLower.includes("'s");
+    const isCurrentUser = !isAssistantMention && currentUserName && (
+      mentionLower === userNameLower ||
+      mentionLower === userNameLower.split(' ')[0]
     );
 
     // Check if it's a valid participant
-    const isValidMention = participants.some(p =>
-      p.displayName.toLowerCase().includes(mentionName.toLowerCase().split("'")[0]) ||
-      mentionName.toLowerCase().includes(p.displayName.toLowerCase().split(' ')[0])
-    );
+    const isValidMention = participants.some(p => {
+      const nameLower = p.displayName.toLowerCase();
+      return mentionLower === nameLower ||
+             mentionLower === nameLower.split(' ')[0] ||
+             nameLower.startsWith(mentionLower.split("'")[0]);
+    });
 
     if (isValidMention) {
       parts.push(
@@ -820,7 +825,7 @@ function StatePanel({
       {canonicalState.statusSummary && canonicalState.statusSummary.length > 0 && (
         <div>
           <SectionHeader>Progress</SectionHeader>
-          <ul className="space-y-2">
+          <ul className="space-y-2 list-none">
             {canonicalState.statusSummary.map((item, i) => (
               <li key={i} className="flex items-baseline gap-2.5 text-[13px] text-foreground/60 leading-[1.5]">
                 <span className="w-[3px] h-[3px] rounded-full bg-foreground/30 mt-[7px] shrink-0" />
@@ -835,14 +840,14 @@ function StatePanel({
       {sessionConstraints.length > 0 && (
         <div>
           <SectionHeader>Constraints</SectionHeader>
-          <ul className="space-y-2">
+          <ul className="space-y-2 list-none">
             {sessionConstraints.map((c, i) => {
-              const participant = participants.find((p) => p.id === c.participantId);
+              // Strip any leading dash/bullet from constraint text
+              const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
               return (
-                <li key={i} className="text-[13px] leading-[1.5]">
-                  <span className="text-primary/80 font-medium">{participant?.displayName?.split(' ')[0] || '—'}</span>
-                  <span className="text-foreground/40 mx-1.5">·</span>
-                  <span className="text-foreground/60">{c.constraint}</span>
+                <li key={i} className="flex items-baseline gap-2.5 text-[13px] text-foreground/60 leading-[1.5]">
+                  <span className="w-[3px] h-[3px] rounded-full bg-foreground/30 mt-[7px] shrink-0" />
+                  {constraintText}
                 </li>
               );
             })}
@@ -854,7 +859,7 @@ function StatePanel({
       {unresolvedQuestions.length > 0 && (
         <div>
           <SectionHeader accent>Open Questions</SectionHeader>
-          <ul className="space-y-2.5">
+          <ul className="space-y-2.5 list-none">
             {unresolvedQuestions.map((q) => (
               <li key={q.id} className="text-[13px] leading-[1.5]">
                 <span className="inline-flex items-center gap-1.5 text-primary/70 font-medium mb-0.5">

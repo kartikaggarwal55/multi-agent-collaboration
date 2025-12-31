@@ -11,6 +11,32 @@ import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion } from "
 
 const anthropic = new Anthropic();
 const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-sonnet-4-20250514";
+const RATE_LIMIT_RETRY_DELAY_MS = 2000;
+const MAX_RATE_LIMIT_RETRIES = 2;
+
+// Helper for rate-limited API calls with exponential backoff
+async function callWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = MAX_RATE_LIMIT_RETRIES
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isRateLimit = errorMessage.includes("429") || errorMessage.includes("rate_limit");
+
+      if (isRateLimit && attempt < maxRetries) {
+        const delay = RATE_LIMIT_RETRY_DELAY_MS * Math.pow(2, attempt);
+        console.log(`Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
 
 // Event types for streaming
 export type GroupCollaborationEvent =
@@ -75,6 +101,23 @@ function createEmitTurnTool(humanNames: string[]) {
                   constraint: { type: "string" },
                 },
               },
+            },
+            suggested_next_steps: { type: "array", items: { type: "string" }, description: "Action items or next steps to take" },
+            add_questions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  target: { type: "string", description: "Who should answer (participant name or 'All')" },
+                  question: { type: "string" },
+                },
+              },
+              description: "Questions that need answers from participants",
+            },
+            resolve_questions: {
+              type: "array",
+              items: { type: "string" },
+              description: "IDs of questions that have been answered",
             },
             stage: { type: "string", enum: ["negotiating", "searching", "waiting_for_user", "converged"] },
           },
@@ -403,14 +446,16 @@ async function callAssistant(
     tools.push(...MAPS_TOOLS);
   }
 
-  let response = await anthropic.messages.create({
-    model: ASSISTANT_MODEL,
-    max_tokens: 4096,
-    system: systemPrompt,
-    tools,
-    tool_choice: { type: "auto" },
-    messages: [{ role: "user", content: userMessage }],
-  });
+  let response = await callWithRetry(() =>
+    anthropic.messages.create({
+      model: ASSISTANT_MODEL,
+      max_tokens: 4096,
+      system: systemPrompt,
+      tools,
+      tool_choice: { type: "auto" },
+      messages: [{ role: "user", content: userMessage }],
+    })
+  );
 
   // Collect all text from response (includes web search results with citations)
   let allText = "";
@@ -497,17 +542,19 @@ async function callAssistant(
                  !("type" in block && (block as { type: string }).type === "web_search_tool_result")
       );
 
-      response = await anthropic.messages.create({
-        model: ASSISTANT_MODEL,
-        max_tokens: 4096,
-        system: systemPrompt,
-        tools,
-        messages: [
-          { role: "user", content: userMessage },
-          { role: "assistant", content: clientContent },
-          { role: "user", content: toolResults },
-        ],
-      });
+      response = await callWithRetry(() =>
+        anthropic.messages.create({
+          model: ASSISTANT_MODEL,
+          max_tokens: 4096,
+          system: systemPrompt,
+          tools,
+          messages: [
+            { role: "user", content: userMessage },
+            { role: "assistant", content: clientContent },
+            { role: "user", content: toolResults },
+          ],
+        })
+      );
     } else {
       break;
     }
@@ -554,6 +601,10 @@ function applyStatePatch(
     newState.stage = patch.stage;
   }
 
+  if (patch.suggested_next_steps) {
+    newState.suggestedNextSteps = patch.suggested_next_steps;
+  }
+
   if (patch.add_constraints) {
     const existing = new Set(
       (newState.constraints || []).map(c => `${c.participantId}:${c.constraint}`)
@@ -572,6 +623,26 @@ function applyStatePatch(
         ];
       }
     }
+  }
+
+  if (patch.add_questions) {
+    for (const q of patch.add_questions) {
+      const newQuestion = {
+        id: crypto.randomUUID(),
+        target: q.target,
+        question: q.question,
+        askedBy: updatedBy,
+        askedAt: new Date().toISOString(),
+        resolved: false,
+      };
+      newState.openQuestions = [...(newState.openQuestions || []), newQuestion];
+    }
+  }
+
+  if (patch.resolve_questions) {
+    newState.openQuestions = (newState.openQuestions || []).map(q =>
+      patch.resolve_questions!.includes(q.id) ? { ...q, resolved: true } : q
+    );
   }
 
   newState.lastUpdatedAt = new Date().toISOString();

@@ -202,7 +202,7 @@ ${openQuestionsSection}
 
 7. **Be concise but warm**: 2-4 sentences per point. No walls of text.
 
-8. **Always include links**: When mentioning places or venues, include clickable Google Maps links inline.
+8. **Always include links for external information or actions**: Whenever referencing any external information or actions found or created via tools (such as web search, maps, Gmail, calendar, etc.), always include relevant clickable links inline so others can easily verify, access the source, or interact with objects such as draft emails or calendar events.
 
 ## REQUIRED: Structured Output
 

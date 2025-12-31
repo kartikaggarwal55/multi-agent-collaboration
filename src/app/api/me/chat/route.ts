@@ -31,10 +31,38 @@ import {
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic();
-const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-sonnet-4-5";
+const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-sonnet-4-20250514";
+const RATE_LIMIT_RETRY_DELAY_MS = 2000;
+const MAX_RATE_LIMIT_RETRIES = 2;
+
+const MAX_MESSAGE_LENGTH = 10000; // 10k characters max
+
+// Helper for rate-limited API calls with exponential backoff
+async function callWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = MAX_RATE_LIMIT_RETRIES
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isRateLimit = errorMessage.includes("429") || errorMessage.includes("rate_limit");
+
+      if (isRateLimit && attempt < maxRetries) {
+        const delay = RATE_LIMIT_RETRY_DELAY_MS * Math.pow(2, attempt);
+        console.log(`Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
 
 const messageSchema = z.object({
-  content: z.string().min(1),
+  content: z.string().min(1).max(MAX_MESSAGE_LENGTH),
 });
 
 // GET - Fetch chat history and profile
@@ -179,6 +207,11 @@ export async function POST(request: Request) {
     // Build tools list based on available access
     const tools: Anthropic.Messages.Tool[] = [
       PRIVATE_EMIT_TURN_TOOL as unknown as Anthropic.Messages.Tool,
+      {
+        type: "web_search_20250305",
+        name: "web_search",
+        max_uses: 5,
+      } as unknown as Anthropic.Messages.Tool,
     ];
     if (hasCalendar) {
       tools.push(...CALENDAR_TOOLS);
@@ -225,14 +258,16 @@ export async function POST(request: Request) {
 
           // CHANGED: Loop to handle tool calls (max 3 rounds)
           for (let round = 0; round < 3; round++) {
-            const response = await anthropic.messages.create({
-              model: ASSISTANT_MODEL,
-              max_tokens: 2048,
-              system: systemPrompt,
-              tools,
-              tool_choice: { type: "any" },
-              messages,
-            });
+            const response = await callWithRetry(() =>
+              anthropic.messages.create({
+                model: ASSISTANT_MODEL,
+                max_tokens: 2048,
+                system: systemPrompt,
+                tools,
+                tool_choice: { type: "any" },
+                messages,
+              })
+            );
 
             // Process response
             let hasToolUse = false;
@@ -331,9 +366,18 @@ export async function POST(request: Request) {
                     tool_use_id: block.id,
                     content: toolResult,
                   });
+                } else if (block.name === "web_search") {
+                  // Web search is a server-side tool - results come as text blocks
+                  sendEvent("status", { status: `Searching the web...` });
+                  // Don't add to toolResults - handled by server
                 }
               }
             }
+
+            // Check if web_search was used - can't mix server/client tool results
+            const hasWebSearch = response.content.some(
+              (block) => block.type === "tool_use" && block.name === "web_search"
+            );
 
             // CHANGED: If we have emit_turn, process it and break
             if (pendingEmitTurn) {
@@ -351,11 +395,23 @@ export async function POST(request: Request) {
               break;
             }
 
-            // CHANGED: If we have tool results (calendar), continue the conversation
+            // If web_search was used, break - can't continue with mixed tool results
+            if (hasWebSearch) {
+              break;
+            }
+
+            // CHANGED: If we have tool results (calendar, gmail, maps), continue the conversation
             if (toolResults.length > 0) {
+              // Filter out server-side tool blocks from previous response
+              const clientContent = response.content.filter(
+                (block) =>
+                  block.type !== "server_tool_use" &&
+                  !("type" in block && (block as { type: string }).type === "web_search_tool_result")
+              );
+
               messages = [
                 ...messages,
-                { role: "assistant", content: response.content },
+                { role: "assistant", content: clientContent },
                 { role: "user", content: toolResults },
               ];
               continue;
