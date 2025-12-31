@@ -282,7 +282,7 @@ export async function POST(request: Request) {
 
             // Process response blocks
             const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
-            let emitTurnResult: {
+            interface EmitTurnResult {
               message: string;
               profile_updates?: {
                 should_update: boolean;
@@ -294,13 +294,14 @@ export async function POST(request: Request) {
                   reason: string;
                 }>;
               };
-            } | null = null;
+            }
+            let emitTurnResult: EmitTurnResult | null = null;
 
             for (const block of response.content) {
               if (block.type === "tool_use") {
                 if (block.name === "emit_turn") {
                   // Extract the final response
-                  emitTurnResult = block.input as typeof emitTurnResult;
+                  emitTurnResult = block.input as EmitTurnResult;
                 } else if (isCalendarTool(block.name)) {
                   sendEvent("status", { status: `Checking calendar...` });
                   const toolResult = await executeCalendarTool(
