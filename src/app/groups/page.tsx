@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatNav } from "@/components/chat-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const LogOutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -212,6 +213,7 @@ export default function GroupsPage() {
           </div>
           <div className="flex items-center gap-3">
             <ChatNav />
+            <ThemeToggle />
             <Button
               onClick={() => setShowCreateModal(true)}
               className="h-10 px-4 rounded-lg bg-primary hover:bg-primary/90"

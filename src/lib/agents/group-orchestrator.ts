@@ -102,22 +102,10 @@ function createEmitTurnTool(humanNames: string[]) {
                 },
               },
             },
-            suggested_next_steps: { type: "array", items: { type: "string" }, description: "Action items or next steps to take" },
-            add_questions: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  target: { type: "string", description: "Who should answer (participant name or 'All')" },
-                  question: { type: "string" },
-                },
-              },
-              description: "Questions that need answers from participants",
-            },
-            resolve_questions: {
+            suggested_next_steps: {
               type: "array",
               items: { type: "string" },
-              description: "IDs of questions that have been answered",
+              description: "Concise pending decisions (e.g., 'Decide on venue', 'Confirm dates'). Replace the entire list each time - remove items that are resolved, add new ones. Keep to 3-5 items max."
             },
             stage: { type: "string", enum: ["negotiating", "searching", "waiting_for_user", "converged"] },
           },
@@ -213,6 +201,12 @@ Only set skip_turn=true if:
 - Include links for places, flights, etc.
 - Use @mentions when addressing assistants or your owner
 - Update state_patch with new constraints, leading options, etc.
+
+## Next Steps (Important)
+Keep suggested_next_steps as a short list (3-5 items) of concise pending decisions.
+- Good: "Decide on venue", "Confirm dates", "Book flights"
+- Bad: "Alice: Where are you thinking of hosting? at home or at a venue?"
+Replace the entire list each time - remove resolved items, add new ones.
 
 Call emit_turn with your response.`;
 }
@@ -623,26 +617,6 @@ function applyStatePatch(
         ];
       }
     }
-  }
-
-  if (patch.add_questions) {
-    for (const q of patch.add_questions) {
-      const newQuestion = {
-        id: crypto.randomUUID(),
-        target: q.target,
-        question: q.question,
-        askedBy: updatedBy,
-        askedAt: new Date().toISOString(),
-        resolved: false,
-      };
-      newState.openQuestions = [...(newState.openQuestions || []), newQuestion];
-    }
-  }
-
-  if (patch.resolve_questions) {
-    newState.openQuestions = (newState.openQuestions || []).map(q =>
-      patch.resolve_questions!.includes(q.id) ? { ...q, resolved: true } : q
-    );
   }
 
   newState.lastUpdatedAt = new Date().toISOString();

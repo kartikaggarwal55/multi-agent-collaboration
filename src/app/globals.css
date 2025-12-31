@@ -138,6 +138,36 @@
   --ring: oklch(0.55 0.12 55);
 }
 
+/* Light mode overrides for backgrounds and panels */
+.light .mesh-gradient {
+  background:
+    radial-gradient(ellipse at 0% 0%, oklch(0.55 0.08 55 / 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 0%, oklch(0.60 0.06 200 / 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 100%, oklch(0.55 0.05 55 / 0.05) 0%, transparent 50%);
+}
+
+.light .glass-panel {
+  background: linear-gradient(
+    180deg,
+    oklch(0.995 0.003 85 / 0.95),
+    oklch(0.98 0.005 85 / 0.92)
+  );
+  border-left: 1px solid oklch(0.85 0.01 85 / 0.8);
+}
+
+.light .noise-overlay::before {
+  opacity: 0.015;
+  mix-blend-mode: multiply;
+}
+
+.light ::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0.015 85);
+}
+
+.light ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.65 0.02 85);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CanonicalState } from "@/lib/types";
 import { ChatNav } from "@/components/chat-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const LogOutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -115,61 +116,76 @@ function renderMentions(
   currentUserName: string | null | undefined,
   participants: Participant[]
 ): React.ReactNode[] {
-  // Match @Name, @First Last, or @Name's Assistant - Unicode-aware
-  const mentionRegex = /@([\p{L}\p{N}]+(?:(?:'s)?\s+[\p{L}\p{N}]+)*)/gu;
+  // Build list of all participant names (sorted by length descending for longest-match-first)
+  const participantNames = participants
+    .map(p => p.displayName)
+    .sort((a, b) => b.length - a.length);
+
+  const userFirstName = currentUserName?.split(' ')[0] || '';
+  const userFullName = currentUserName || '';
+
   const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let match;
+  let remaining = content;
+  let keyIndex = 0;
 
-  while ((match = mentionRegex.exec(content)) !== null) {
-    // Add text before the mention
-    if (match.index > lastIndex) {
-      parts.push(content.slice(lastIndex, match.index));
+  while (remaining.length > 0) {
+    // Find the next @ symbol
+    const atIndex = remaining.indexOf('@');
+
+    if (atIndex === -1) {
+      // No more @, add remaining text
+      parts.push(remaining);
+      break;
     }
 
-    const mentionText = match[0]; // e.g., "@Kartik Aggarwal" or "@Kartik's Assistant"
-    const mentionName = match[1]; // e.g., "Kartik Aggarwal" or "Kartik's Assistant"
-
-    // Check if this mention matches the current user (not their assistant)
-    const mentionLower = mentionName.toLowerCase();
-    const userNameLower = currentUserName?.toLowerCase() || '';
-    const isAssistantMention = mentionLower.includes("'s");
-    const isCurrentUser = !isAssistantMention && currentUserName && (
-      mentionLower === userNameLower ||
-      mentionLower === userNameLower.split(' ')[0]
-    );
-
-    // Check if it's a valid participant
-    const isValidMention = participants.some(p => {
-      const nameLower = p.displayName.toLowerCase();
-      return mentionLower === nameLower ||
-             mentionLower === nameLower.split(' ')[0] ||
-             nameLower.startsWith(mentionLower.split("'")[0]);
-    });
-
-    if (isValidMention) {
-      parts.push(
-        <span
-          key={match.index}
-          className={`font-semibold px-1 py-0.5 rounded ${
-            isCurrentUser
-              ? 'bg-primary/20 text-primary border border-primary/30'
-              : 'bg-foreground/10 text-foreground/80'
-          }`}
-        >
-          {mentionText}
-        </span>
-      );
-    } else {
-      parts.push(mentionText);
+    // Add text before the @
+    if (atIndex > 0) {
+      parts.push(remaining.slice(0, atIndex));
     }
 
-    lastIndex = match.index + match[0].length;
-  }
+    // Check if text after @ matches any participant name (case-insensitive)
+    const afterAt = remaining.slice(atIndex + 1);
+    let matched = false;
 
-  // Add remaining text
-  if (lastIndex < content.length) {
-    parts.push(content.slice(lastIndex));
+    for (const name of participantNames) {
+      // Check if afterAt starts with this name (case-insensitive)
+      if (afterAt.toLowerCase().startsWith(name.toLowerCase())) {
+        // Make sure it's a word boundary (not followed by alphanumeric)
+        const nextChar = afterAt[name.length];
+        if (!nextChar || !/\w/.test(nextChar)) {
+          const mentionText = '@' + afterAt.slice(0, name.length);
+
+          // Check if this is the current user (not their assistant)
+          const isCurrentUser = (
+            name.toLowerCase() === userFullName.toLowerCase() ||
+            name.toLowerCase() === userFirstName.toLowerCase()
+          ) && !name.toLowerCase().includes("'");
+
+          parts.push(
+            <span
+              key={keyIndex++}
+              className={`font-semibold px-1 py-0.5 rounded ${
+                isCurrentUser
+                  ? 'bg-primary/20 text-primary border border-primary/30'
+                  : 'bg-foreground/10 text-foreground/80'
+              }`}
+            >
+              {mentionText}
+            </span>
+          );
+
+          remaining = afterAt.slice(name.length);
+          matched = true;
+          break;
+        }
+      }
+    }
+
+    if (!matched) {
+      // No participant match, just add the @ and continue
+      parts.push('@');
+      remaining = afterAt;
+    }
   }
 
   return parts.length > 0 ? parts : [content];
@@ -508,6 +524,7 @@ export default function GroupPage({
             </div>
             <div className="flex items-center gap-2">
               <ChatNav />
+              <ThemeToggle />
               <Button
                 variant="secondary"
                 size="sm"
@@ -781,7 +798,6 @@ function StatePanel({
     );
   }
 
-  const unresolvedQuestions = canonicalState.openQuestions?.filter((q) => !q.resolved) || [];
   const sessionConstraints = canonicalState.constraints?.filter((c) => c.source === "session_statement") || [];
 
   // Section header component for consistency
@@ -851,24 +867,6 @@ function StatePanel({
                 </li>
               );
             })}
-          </ul>
-        </div>
-      )}
-
-      {/* Open Questions */}
-      {unresolvedQuestions.length > 0 && (
-        <div>
-          <SectionHeader accent>Open Questions</SectionHeader>
-          <ul className="space-y-2.5 list-none">
-            {unresolvedQuestions.map((q) => (
-              <li key={q.id} className="text-[13px] leading-[1.5]">
-                <span className="inline-flex items-center gap-1.5 text-primary/70 font-medium mb-0.5">
-                  <span className="text-primary">?</span>
-                  {q.target}
-                </span>
-                <p className="text-foreground/60 pl-4">{q.question}</p>
-              </li>
-            ))}
           </ul>
         </div>
       )}

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChatNav } from "@/components/chat-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 // Icons
 const SendIcon = () => (
@@ -212,6 +213,7 @@ export default function PrivateAssistantPage() {
             </div>
             <div className="flex items-center gap-3">
               <ChatNav />
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 size="sm"
