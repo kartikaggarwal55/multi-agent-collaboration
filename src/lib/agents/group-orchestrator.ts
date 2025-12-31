@@ -130,7 +130,7 @@ function generateSystemPrompt(
 
   const tools = [
     "Web search - Find flights, hotels, restaurants, activities. Always include clickable links to booking sites, Google Flights, etc.",
-    hasCalendar ? `Calendar - Check ${ownerName}'s availability and schedule events` : null,
+    hasCalendar ? `Calendar - Check ${ownerName}'s availability and schedule events. Always include [View in Calendar](url) links for events` : null,
     hasGmail ? `Gmail - Search ${ownerName}'s emails for confirmations, reservations, receipts. Always include [Open in Gmail](url) links` : null,
     hasMaps ? "Maps - Search for places, restaurants, venues. Always include [View on Google Maps](url) links" : null,
   ].filter(Boolean).join("\n- ");
@@ -190,18 +190,24 @@ When the conversation needs information (flights, hotels, places, availability):
 3. Present OPTIONS with prices, times, and booking links
 4. If another assistant asked you something, RESEARCH and RESPOND with findings
 
-## When to Skip
-Only set skip_turn=true if:
+## When to Skip (IMPORTANT)
+Set skip_turn=true ONLY if you have NOTHING to contribute. When you skip:
+- Do NOT provide a public_message - your turn is completely silent
+- Do NOT announce that you're skipping - just skip silently
+
+Skip when:
 - You were not addressed and have nothing new to add
 - Another assistant already covered exactly what you would say
+- The message is directed at another user's assistant, not you
 
 ## Response Format
 - Be concise (2-4 sentences for main points)
-- **Always include clickable links** in markdown format: [Link Text](url)
-  - Flights: Link to Google Flights, Kayak, or airline booking pages
-  - Hotels: Link to Booking.com, Hotels.com, or hotel websites
-  - Restaurants/Places: Link to Google Maps, Yelp, or OpenTable
-  - Emails: Link to Gmail with [Open in Gmail](url)
+- **Always include clickable links inline** in markdown format: [Link Text](url)
+  - Flights: [View on Google Flights](url) or airline booking pages
+  - Hotels: [Book on Hotels.com](url) or hotel websites
+  - Restaurants/Places: [View on Google Maps](url) or [Reserve on OpenTable](url)
+  - Emails: [Open in Gmail](url)
+  - Calendar events: [View in Calendar](url)
 - Use @mentions when addressing assistants or your owner
 - Update state_patch with new constraints, leading options, etc.
 
@@ -579,7 +585,13 @@ async function callAssistant(
   // Clean up cite tags
   finalContent = finalContent.replace(/<cite[^>]*>([^<]*)<\/cite>/g, "$1").trim();
 
-  const skipped = emitTurnResult?.skip_turn === true && !finalContent;
+  // If skip_turn is true, we skip regardless of any message content
+  const skipped = emitTurnResult?.skip_turn === true;
+
+  // Clear content if skipping - skip means silent
+  if (skipped) {
+    finalContent = "";
+  }
 
   return {
     skipped,

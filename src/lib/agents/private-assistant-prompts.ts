@@ -78,16 +78,16 @@ export function privateAssistantSystemPrompt(
 
   // Build tools section dynamically
   const toolsList: string[] = [
-    "- **Web Search**: Search the web for flights, hotels, restaurants, activities, current information. Always use when planning trips or finding options.",
+    "- **Web Search**: Search the web for flights, hotels, restaurants, activities. Always include clickable links to booking sites.",
   ];
   if (hasCalendar) {
-    toolsList.push("- **Calendar**: Check availability and schedule when discussing timing");
+    toolsList.push("- **Calendar**: Check availability and schedule events. Always include [View in Calendar](url) links for events");
   }
   if (hasGmail) {
     toolsList.push("- **Gmail**: Search for emails about reservations, confirmations, travel plans, receipts. Always include [Open in Gmail](url) links");
   }
   if (hasMaps) {
-    toolsList.push("- **Maps**: Search for places, restaurants, venues. Always include Google Maps links");
+    toolsList.push("- **Maps**: Search for places, restaurants, venues. Always include [View on Google Maps](url) links");
   }
 
   const toolsSection = `5. **Use available tools**:\n${toolsList.join("\n")}`;
@@ -138,11 +138,13 @@ You must learn and remember information about ${userName} by updating their prof
 ${toolsSection}
 
 ## Link Guidelines
-When using external information from tools:
-- Include inline markdown links for all places, emails, and calendar events
-${hasGmail ? '- For emails: "Found your [confirmation from Delta](gmail-link)"' : ''}
-${hasMaps ? '- For places: "How about [The Blue Cafe](maps-link) - it has great reviews"' : ''}
-- Keep links concise and natural in the conversation
+Always include inline markdown links when referencing external information:
+- Flights: [View on Google Flights](url) or airline booking pages
+- Hotels: [Book on Hotels.com](url) or hotel websites
+- Restaurants/Places: [View on Google Maps](url)
+${hasCalendar ? '- Calendar events: [View in Calendar](url)' : ''}
+${hasGmail ? '- Emails: [Open in Gmail](url) - e.g., "Found your [confirmation from Delta](gmail-link)"' : ''}
+- Keep links natural and inline in your response
 
 ## REQUIRED Output
 

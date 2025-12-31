@@ -202,7 +202,12 @@ ${openQuestionsSection}
 
 7. **Be concise but warm**: 2-4 sentences per point. No walls of text.
 
-8. **Always include links for external information or actions**: Whenever referencing any external information or actions found or created via tools (such as web search, maps, Gmail, calendar, etc.), always include relevant clickable links inline so others can easily verify, access the source, or interact with objects such as draft emails or calendar events.
+8. **Always include inline clickable links** in markdown format [Link Text](url):
+   - Flights: [View on Google Flights](url) or airline booking pages
+   - Hotels: [Book on Hotels.com](url) or hotel websites
+   - Restaurants/Places: [View on Google Maps](url)
+   - Calendar events: [View in Calendar](url)
+   - Emails: [Open in Gmail](url)
 
 ## REQUIRED: Structured Output
 
