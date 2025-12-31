@@ -525,14 +525,25 @@ async function callAssistant(
       }
     }
 
-    // If we got emit_turn, we're done
-    if (emitTurnResult) break;
-
     // If web_search was used, don't try to continue - results are in the response
     if (hasWebSearch) break;
 
-    // Continue if we have tool results to send
-    if (toolResults.length > 0) {
+    // Check if we have other tool results besides emit_turn that need processing
+    const hasOtherToolResults = toolResults.some(r => {
+      // Find the original tool use for this result
+      const toolUse = toolUseBlocks.find(t => t.id === r.tool_use_id);
+      return toolUse && toolUse.name !== "emit_turn";
+    });
+
+    // If emit_turn was called WITHOUT other tools, we're done
+    if (emitTurnResult && !hasOtherToolResults) break;
+
+    // If we have tool results to send (gmail, calendar, maps), continue the conversation
+    // This lets the model incorporate the results into its emit_turn message
+    if (toolResults.length > 0 && hasOtherToolResults) {
+      // Clear emit_turn so model can call it again with the tool results
+      emitTurnResult = null;
+
       // Filter out server-side tool blocks from previous response
       const clientContent = response.content.filter(
         block => block.type !== "server_tool_use" &&
