@@ -330,25 +330,25 @@ export default function PrivateAssistantPage() {
             <div className="px-5 py-4 space-y-5">
               {/* Profile section */}
               <div className="space-y-3">
-                <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                   <TagIcon />
                   My Profile
                 </div>
                 {profile.length === 0 ? (
-                  <div className="p-4 rounded-lg bg-[oklch(0.22_0.01_250)] border border-[oklch(0.30_0.015_250)] text-center">
+                  <div className="p-4 rounded-lg bg-muted/50 border border-border/50 text-center">
                     <p className="text-xs text-muted-foreground">
                       No preferences yet. Chat with your assistant to build your profile.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {profile.map((item, i) => (
                       <div
                         key={i}
-                        className="flex items-start gap-2 p-2.5 rounded-lg bg-[oklch(0.22_0.01_250)] border border-[oklch(0.30_0.015_250)] card-hover"
+                        className="flex items-start gap-2.5 p-3 rounded-lg bg-secondary/50 border border-border/50 card-hover"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                        <span className="text-sm leading-relaxed">{item}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
+                        <span className="text-[14px] leading-relaxed text-foreground/90">{item}</span>
                       </div>
                     ))}
                   </div>
@@ -358,30 +358,30 @@ export default function PrivateAssistantPage() {
               {/* Recent changes */}
               {recentChanges.length > 0 && (
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                  <div className="flex items-center gap-2 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                     <HistoryIcon />
                     Recent Changes
                   </div>
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {recentChanges.map((change, i) => (
                       <div
                         key={i}
-                        className="p-2.5 rounded-lg bg-[oklch(0.20_0.01_250)] border border-[oklch(0.28_0.015_250)]"
+                        className="p-3 rounded-lg bg-muted/30 border border-border/40"
                       >
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1.5">
                           <span
-                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase ${
                               change.type === "added"
-                                ? "bg-emerald-500/20 text-emerald-400"
+                                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
                                 : change.type === "updated"
-                                ? "bg-blue-500/20 text-blue-400"
-                                : "bg-red-500/20 text-red-400"
+                                ? "bg-blue-500/20 text-blue-600 dark:text-blue-400"
+                                : "bg-red-500/20 text-red-600 dark:text-red-400"
                             }`}
                           >
                             {change.type}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
+                        <p className="text-[13px] text-muted-foreground leading-relaxed">
                           {change.reason}
                         </p>
                       </div>
