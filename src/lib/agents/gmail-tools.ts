@@ -25,21 +25,28 @@ export function isGmailTool(toolName: string): boolean {
 export const GMAIL_TOOLS: Anthropic.Messages.Tool[] = [
   {
     name: "gmail_search",
-    description: `Search your Gmail inbox. Supports Gmail query syntax:
-- from:sender@example.com - emails from a specific sender
-- to:recipient@example.com - emails to a recipient
-- subject:keyword - emails with keyword in subject
-- newer_than:7d - emails from last 7 days (use d for days, m for months)
-- older_than:30d - emails older than 30 days
-- has:attachment - emails with attachments
-- filename:pdf - emails with PDF attachments
-- "exact phrase" - emails containing exact phrase
-- is:starred, is:unread, is:important - filtered by status
+    description: `Search your Gmail inbox using Gmail query syntax.
+
+Query operators:
+- from:sender - emails from sender
+- to:recipient - emails to recipient
+- subject:word - word in subject line
+- newer_than:Xd/m/y - within last X days/months/years
+- older_than:Xd/m/y - older than X days/months/years
+- has:attachment - has attachments
+- filename:type - specific attachment type
+- "exact phrase" - exact phrase match
+- (A OR B) - either A or B
+- -word - exclude word
+
+STRATEGY: Always start with newer_than to find recent emails first. If no results, try broader terms or longer time ranges.
 
 Examples:
-- "from:amazon subject:order newer_than:30d"
-- "subject:(reservation OR confirmation) newer_than:14d"
-- "from:airline has:attachment"`,
+- "subject:invoice newer_than:30d" - recent invoices
+- "from:noreply subject:confirmation newer_than:7d" - recent confirmations
+- "(payment OR bill OR statement) newer_than:60d" - billing emails
+- "subject:receipt has:attachment newer_than:14d" - receipts with attachments
+- "from:support newer_than:90d" - recent support emails`,
     input_schema: {
       type: "object" as const,
       properties: {

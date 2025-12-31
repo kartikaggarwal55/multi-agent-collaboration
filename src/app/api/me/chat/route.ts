@@ -256,137 +256,107 @@ export async function POST(request: Request) {
           } | null = null;
           let needsReconnect = false;
 
-          // CHANGED: Loop to handle tool calls (max 3 rounds)
-          for (let round = 0; round < 3; round++) {
+          // Agentic loop with guaranteed response via emit_turn
+          // Strategy: Allow up to 4 rounds of tool use, then force emit_turn on round 5
+          const MAX_TOOL_ROUNDS = 5;
+
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            const isLastRound = round === MAX_TOOL_ROUNDS - 1;
+
+            // On last round, force emit_turn to guarantee a response
+            const toolChoice = isLastRound
+              ? { type: "tool" as const, name: "emit_turn" }
+              : { type: "auto" as const };
+
             const response = await callWithRetry(() =>
               anthropic.messages.create({
                 model: ASSISTANT_MODEL,
                 max_tokens: 2048,
+                temperature: 0.2, // Low temperature for consistency with some flexibility
                 system: systemPrompt,
                 tools,
-                tool_choice: { type: "any" },
+                tool_choice: toolChoice,
                 messages,
               })
             );
 
-            // Process response
-            let hasToolUse = false;
+            // Process response blocks
             const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
-            let pendingEmitTurn: {
-              id: string;
-              input: {
-                message: string;
-                profile_updates?: {
-                  should_update: boolean;
-                  new_profile_items?: string[];
-                  changes?: Array<{
-                    type: "added" | "updated" | "removed";
-                    before?: string;
-                    after?: string;
-                    reason: string;
-                  }>;
-                };
+            let emitTurnResult: {
+              message: string;
+              profile_updates?: {
+                should_update: boolean;
+                new_profile_items?: string[];
+                changes?: Array<{
+                  type: "added" | "updated" | "removed";
+                  before?: string;
+                  after?: string;
+                  reason: string;
+                }>;
               };
             } | null = null;
 
             for (const block of response.content) {
-              if (block.type === "text") {
-                assistantContent += block.text;
-              } else if (block.type === "tool_use") {
-                hasToolUse = true;
-
+              if (block.type === "tool_use") {
                 if (block.name === "emit_turn") {
-                  // CHANGED: Store emit_turn for later processing
-                  pendingEmitTurn = {
-                    id: block.id,
-                    input: block.input as {
-                      message: string;
-                      profile_updates?: {
-                        should_update: boolean;
-                        new_profile_items?: string[];
-                        changes?: Array<{
-                          type: "added" | "updated" | "removed";
-                          before?: string;
-                          after?: string;
-                          reason: string;
-                        }>;
-                      };
-                    },
-                  };
+                  // Extract the final response
+                  emitTurnResult = block.input as typeof emitTurnResult;
                 } else if (isCalendarTool(block.name)) {
-                  // Execute calendar tool
                   sendEvent("status", { status: `Checking calendar...` });
-
                   const toolResult = await executeCalendarTool(
                     userId,
                     block.name,
                     block.input as Record<string, unknown>
                   );
-
-                  // Check if result indicates reconnect needed
                   if (toolResult.includes("needs to be reconnected")) {
                     needsReconnect = true;
                   }
-
                   toolResults.push({
                     type: "tool_result",
                     tool_use_id: block.id,
                     content: toolResult,
                   });
                 } else if (isGmailTool(block.name)) {
-                  // Execute Gmail tool
                   sendEvent("status", { status: `Searching emails...` });
-
                   const toolResult = await executeGmailTool(
                     userId,
                     block.name,
                     block.input as Record<string, unknown>
                   );
-
                   if (toolResult.includes("needs to be reconnected")) {
                     needsReconnect = true;
                   }
-
                   toolResults.push({
                     type: "tool_result",
                     tool_use_id: block.id,
                     content: toolResult,
                   });
                 } else if (isMapseTool(block.name)) {
-                  // Execute Maps tool
                   sendEvent("status", { status: `Searching places...` });
-
                   const toolResult = await executeMapseTool(
                     block.name,
                     block.input as Record<string, unknown>
                   );
-
                   toolResults.push({
                     type: "tool_result",
                     tool_use_id: block.id,
                     content: toolResult,
                   });
                 } else if (block.name === "web_search") {
-                  // Web search is a server-side tool - results come as text blocks
                   sendEvent("status", { status: `Searching the web...` });
-                  // Don't add to toolResults - handled by server
+                  // Web search is server-side - results come as text blocks
                 }
               }
             }
 
-            // Check if web_search was used - can't mix server/client tool results
-            const hasWebSearch = response.content.some(
-              (block) => block.type === "tool_use" && block.name === "web_search"
-            );
-
-            // CHANGED: If we have emit_turn, process it and break
-            if (pendingEmitTurn) {
-              assistantContent = pendingEmitTurn.input.message || assistantContent;
-              if (pendingEmitTurn.input.profile_updates) {
+            // If emit_turn was called, extract response and exit loop
+            if (emitTurnResult) {
+              assistantContent = emitTurnResult.message || "";
+              if (emitTurnResult.profile_updates?.should_update) {
                 profileUpdate = {
-                  should_update: pendingEmitTurn.input.profile_updates.should_update,
-                  new_profile_items: pendingEmitTurn.input.profile_updates.new_profile_items,
-                  changes: pendingEmitTurn.input.profile_updates.changes?.map((c) => ({
+                  should_update: true,
+                  new_profile_items: emitTurnResult.profile_updates.new_profile_items,
+                  changes: emitTurnResult.profile_updates.changes?.map((c) => ({
                     ...c,
                     timestamp: new Date().toISOString(),
                   })),
@@ -395,14 +365,23 @@ export async function POST(request: Request) {
               break;
             }
 
-            // If web_search was used, break - can't continue with mixed tool results
+            // Check for web_search - can't mix with client tool results
+            const hasWebSearch = response.content.some(
+              (block) => block.type === "tool_use" && block.name === "web_search"
+            );
             if (hasWebSearch) {
+              // Extract any text response from web search
+              for (const block of response.content) {
+                if (block.type === "text") {
+                  assistantContent = block.text;
+                  break;
+                }
+              }
               break;
             }
 
-            // CHANGED: If we have tool results (calendar, gmail, maps), continue the conversation
+            // If we have client tool results, continue conversation
             if (toolResults.length > 0) {
-              // Filter out server-side tool blocks from previous response
               const clientContent = response.content.filter(
                 (block) =>
                   block.type !== "server_tool_use" &&
@@ -417,13 +396,20 @@ export async function POST(request: Request) {
               continue;
             }
 
-            // No tool use or emit_turn - just text response
-            if (!hasToolUse) {
-              break;
+            // No tool use - extract text response
+            for (const block of response.content) {
+              if (block.type === "text") {
+                assistantContent = block.text;
+                break;
+              }
             }
+            break;
           }
 
-          // Save assistant message
+          // Final fallback if somehow we still have no response
+          if (!assistantContent) {
+            assistantContent = "I apologize, but I wasn't able to complete your request. Please try again or rephrase your question.";
+          }
           const assistantMessage = await prisma.privateMessage.create({
             data: {
               userId,
@@ -482,6 +468,37 @@ export async function POST(request: Request) {
     console.error("Error processing message:", error);
     return new Response(
       JSON.stringify({ error: "Failed to process message" }),
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+}
+
+// DELETE - Clear chat history
+export async function DELETE() {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = session.user.id;
+
+    // Delete all messages for this user
+    await prisma.privateMessage.deleteMany({
+      where: { userId },
+    });
+
+    return new Response(
+      JSON.stringify({ success: true }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  } catch (error) {
+    console.error("Error clearing chat:", error);
+    return new Response(
+      JSON.stringify({ error: "Failed to clear chat" }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }

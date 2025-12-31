@@ -4,14 +4,18 @@ import { formatProfileForPrompt } from "../profile";
 // Tool for emitting structured response with profile updates
 export const PRIVATE_EMIT_TURN_TOOL = {
   name: "emit_turn",
-  description:
-    "REQUIRED at the end of every turn. Reports your response and any profile updates.",
+  description: `Submit your final response to the user. Call this tool ONCE at the end of your turn after you have gathered all needed information.
+
+IMPORTANT: This is how you respond to the user. Your message parameter is what they will see.
+- If you used other tools (gmail_search, calendar, etc.), synthesize the results into a helpful response
+- If you couldn't find what the user asked for, explain what you searched and suggest alternatives
+- Never call emit_turn multiple times per turn`,
   input_schema: {
     type: "object" as const,
     properties: {
       message: {
         type: "string",
-        description: "Your conversational response to the user.",
+        description: "Your complete, helpful response to the user. This is what they will read.",
       },
       profile_updates: {
         type: "object",
@@ -51,10 +55,10 @@ export const PRIVATE_EMIT_TURN_TOOL = {
   },
 };
 
-// CHANGED: Get current date/time formatted for the prompt
+// Get current date/time formatted for the prompt with context
 function getCurrentDateTime(): string {
   const now = new Date();
-  return now.toLocaleString("en-US", {
+  const formatted = now.toLocaleString("en-US", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -63,6 +67,22 @@ function getCurrentDateTime(): string {
     minute: "2-digit",
     timeZoneName: "short",
   });
+
+  const isoDate = now.toISOString().split("T")[0];
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed
+
+  // Determine the year for upcoming months
+  const nextYear = currentYear + 1;
+  const upcomingMonthYear = currentMonth >= 10 ? nextYear : currentYear; // Nov/Dec → next year for Jan/Feb
+
+  return `${formatted}
+ISO Date: ${isoDate}
+Timezone: ${timezone}
+Current Year: ${currentYear}
+
+IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${currentYear} if that month has passed).`;
 }
 
 // System prompt for private assistant
@@ -137,6 +157,19 @@ You must learn and remember information about ${userName} by updating their prof
 4. **Help with planning** - When asked about scheduling, be proactive and helpful
 ${toolsSection}
 
+## Tool Use Strategy
+
+When using tools to find information:
+1. **Search strategically** - Use 1-3 targeted searches, not exhaustive searches
+2. **Interpret results** - If a search returns no results, try a different query OR explain what you tried
+3. **Synthesize findings** - Combine results from multiple searches into a coherent response
+4. **Be honest** - If you can't find something, say so clearly and suggest alternatives
+
+For Gmail searches:
+- Use Gmail query syntax: "from:airline subject:confirmation newer_than:1y"
+- Try variations: different keywords, date ranges, sender names
+- If searching for old emails, use "older_than:Xd" or "older_than:Xy" syntax
+
 ## Link Guidelines
 Always include inline markdown links when referencing external information:
 - Flights: [View on Google Flights](url) or airline booking pages
@@ -146,13 +179,15 @@ ${hasCalendar ? '- Calendar events: [View in Calendar](url)' : ''}
 ${hasGmail ? '- Emails: [Open in Gmail](url) - e.g., "Found your [confirmation from Delta](gmail-link)"' : ''}
 - Keep links natural and inline in your response
 
-## REQUIRED Output
+## Response Format
 
-You MUST call the \`emit_turn\` tool at the end with:
-- message: Your conversational response
-- profile_updates: Object containing should_update (boolean), new_profile_items (full list if updating), and changes (what changed)
+ALWAYS call the \`emit_turn\` tool to submit your response. This is how you communicate with the user.
 
-If no profile update needed, set should_update: false and omit the other fields.
+The emit_turn tool requires:
+- **message**: Your complete response to the user (this is what they see)
+- **profile_updates**: Object with should_update (boolean), and if updating: new_profile_items (full list) and changes
+
+If no profile update needed, set should_update: false.
 If updating, provide the COMPLETE new profile list - it replaces the current one.`;
 }
 

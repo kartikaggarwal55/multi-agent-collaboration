@@ -67,11 +67,16 @@ export interface GroupParticipant {
   userId?: string;
 }
 
-// Simple emit_turn tool
+// emit_turn tool - submit response to the group
 function createEmitTurnTool(humanNames: string[]) {
   return {
     name: "emit_turn",
-    description: "Output your response. If you have nothing material to add, set skip_turn=true.",
+    description: `Submit your response to the group. Call this tool ONCE at the end of your turn after gathering all needed information.
+
+IMPORTANT: This is how you respond to the group. Your public_message is what everyone will see.
+- If you used tools (calendar, gmail, web search), synthesize results into a helpful response
+- If you couldn't find what was asked, explain what you searched and suggest alternatives
+- Set skip_turn=true ONLY if you have absolutely nothing to contribute`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -81,7 +86,7 @@ function createEmitTurnTool(humanNames: string[]) {
         },
         public_message: {
           type: "string",
-          description: "Your message to the group. Include findings from any searches you did.",
+          description: "Your complete message to the group. This is what everyone will read.",
         },
         next_action: {
           type: "string",
@@ -116,6 +121,36 @@ function createEmitTurnTool(humanNames: string[]) {
   };
 }
 
+// Get current date/time formatted for the prompt with context
+function getCurrentDateTime(): string {
+  const now = new Date();
+  const formatted = now.toLocaleString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+
+  const isoDate = now.toISOString().split("T")[0];
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-indexed
+
+  // Determine the year for upcoming months
+  const nextYear = currentYear + 1;
+  const upcomingMonthYear = currentMonth >= 10 ? nextYear : currentYear; // Nov/Dec → next year for Jan/Feb
+
+  return `${formatted}
+ISO Date: ${isoDate}
+Timezone: ${timezone}
+Current Year: ${currentYear}
+
+IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${currentYear} if that month has passed).`;
+}
+
 function generateSystemPrompt(
   ownerName: string,
   ownerProfile: string[],
@@ -127,6 +162,7 @@ function generateSystemPrompt(
   isPrimaryResponder: boolean
 ): string {
   const profileSection = formatProfileForPrompt(ownerProfile);
+  const currentDateTime = getCurrentDateTime();
 
   const tools = [
     "Web search - Find flights, hotels, restaurants, activities. Always include clickable links to booking sites, Google Flights, etc.",
@@ -151,6 +187,9 @@ function generateSystemPrompt(
   const otherHumans = otherParticipants.filter(p => p.kind === "human").map(p => p.name);
 
   return `You are ${ownerName}'s personal assistant in a group planning session.
+
+## Current Date/Time
+${currentDateTime}
 
 ## Your Role
 ${roleContext}
@@ -182,6 +221,17 @@ When you need information from another user (${otherHumans.join(", ") || "none"}
 - The other assistant will either answer (if they know) or ask their user
 
 This creates proactive collaboration between assistants!
+
+## Tool Use Strategy
+When using tools to find information:
+1. **Search strategically** - Use 1-3 targeted searches, not exhaustive searches
+2. **Interpret results** - If a search returns no results, try a different query OR explain what you tried
+3. **Synthesize findings** - Combine results from multiple searches into a coherent response
+4. **Be honest** - If you can't find something, say so clearly and suggest alternatives
+
+For Gmail searches:
+- Use Gmail query syntax: "from:airline subject:confirmation newer_than:1y"
+- Try variations: different keywords, date ranges, sender names
 
 ## Be Proactive
 When the conversation needs information (flights, hotels, places, availability):
@@ -453,6 +503,7 @@ async function callAssistant(
     anthropic.messages.create({
       model: ASSISTANT_MODEL,
       max_tokens: 4096,
+      temperature: 0.2, // Low temperature for consistency with some flexibility
       system: systemPrompt,
       tools,
       tool_choice: { type: "auto" },
@@ -472,9 +523,12 @@ async function callAssistant(
   let emitTurnResult: EmitTurnInput | null = null;
 
   // Process response, handling tool calls
-  let maxRounds = 5;
-  while (maxRounds > 0) {
-    maxRounds--;
+  // Strategy: Allow up to 4 rounds of tool use, then force emit_turn on round 5
+  const MAX_ROUNDS = 5;
+  let currentRound = 0;
+  while (currentRound < MAX_ROUNDS) {
+    currentRound++;
+    const isLastRound = currentRound === MAX_ROUNDS;
 
     // Capture text blocks (including web search results)
     for (const block of response.content) {
@@ -556,12 +610,21 @@ async function callAssistant(
                  !("type" in block && (block as { type: string }).type === "web_search_tool_result")
       );
 
+      // On last round, force emit_turn to guarantee a response
+      const nextRound = currentRound + 1;
+      const nextIsLastRound = nextRound === MAX_ROUNDS;
+      const toolChoice = nextIsLastRound
+        ? { type: "tool" as const, name: "emit_turn" }
+        : { type: "auto" as const };
+
       response = await callWithRetry(() =>
         anthropic.messages.create({
           model: ASSISTANT_MODEL,
           max_tokens: 4096,
+          temperature: 0.2,
           system: systemPrompt,
           tools,
+          tool_choice: toolChoice,
           messages: [
             { role: "user", content: userMessage },
             { role: "assistant", content: clientContent },

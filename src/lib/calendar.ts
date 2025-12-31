@@ -9,6 +9,7 @@ export interface CalendarEvent {
   end: string;
   location?: string;
   description?: string;
+  htmlLink?: string;
 }
 
 export interface FreeBusyBlock {
@@ -114,7 +115,8 @@ export async function listCalendarEvents(
       start: event.start?.dateTime || event.start?.date || "",
       end: event.end?.dateTime || event.end?.date || "",
       location: event.location || undefined,
-      description: event.description?.slice(0, 200) || undefined, // Truncate long descriptions
+      description: event.description?.slice(0, 200) || undefined,
+      htmlLink: event.htmlLink || undefined,
     }));
   } catch (error: unknown) {
     console.error("Error listing calendar events:", error);
@@ -179,7 +181,7 @@ export async function getFreeBusy(
 }
 
 /**
- * CHANGED: Format events for display in assistant response
+ * Format events for display - includes explicit dates and calendar links
  */
 export function formatEventsForDisplay(events: CalendarEvent[]): string {
   if (events.length === 0) {
@@ -191,9 +193,11 @@ export function formatEventsForDisplay(events: CalendarEvent[]): string {
       const startDate = new Date(event.start);
       const endDate = new Date(event.end);
 
+      // Include full date with year and explicit day of week
       const dateStr = startDate.toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
+        weekday: "long",
+        year: "numeric",
+        month: "long",
         day: "numeric",
       });
 
@@ -207,9 +211,12 @@ export function formatEventsForDisplay(events: CalendarEvent[]): string {
         minute: "2-digit",
       });
 
-      let line = `• ${dateStr} ${timeStr}-${endTimeStr}: ${event.summary}`;
+      let line = `• ${dateStr}, ${timeStr}-${endTimeStr}: ${event.summary}`;
       if (event.location) {
         line += ` (${event.location})`;
+      }
+      if (event.htmlLink) {
+        line += ` [View in Calendar](${event.htmlLink})`;
       }
       return line;
     })
@@ -217,23 +224,42 @@ export function formatEventsForDisplay(events: CalendarEvent[]): string {
 }
 
 /**
- * CHANGED: Format free/busy for finding open slots
+ * Format free/busy for finding open slots - includes explicit dates
  */
 export function formatFreeBusyForDisplay(
   busyBlocks: FreeBusyBlock[],
   timeMin: string,
   timeMax: string
 ): string {
+  const startRange = new Date(timeMin);
+  const endRange = new Date(timeMax);
+
+  const rangeStr = `${startRange.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })} to ${endRange.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  })}`;
+
   if (busyBlocks.length === 0) {
-    return `You're completely free during this time range!`;
+    return `You're completely free from ${rangeStr}!`;
   }
 
   const busyText = busyBlocks
     .map((block) => {
       const start = new Date(block.start);
       const end = new Date(block.end);
-      return `• ${start.toLocaleString("en-US", {
-        weekday: "short",
+      return `• ${start.toLocaleDateString("en-US", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      })}, ${start.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
       })} - ${end.toLocaleTimeString("en-US", {
@@ -243,5 +269,5 @@ export function formatFreeBusyForDisplay(
     })
     .join("\n");
 
-  return `Busy times:\n${busyText}`;
+  return `Busy times from ${rangeStr}:\n${busyText}`;
 }

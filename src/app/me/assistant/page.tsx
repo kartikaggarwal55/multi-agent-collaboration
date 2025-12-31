@@ -56,6 +56,14 @@ const HistoryIcon = () => (
   </svg>
 );
 
+const TrashIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18" />
+    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+  </svg>
+);
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -181,6 +189,20 @@ export default function PrivateAssistantPage() {
     }
   };
 
+  const clearChat = async () => {
+    if (!confirm("Clear all messages? This cannot be undone.")) return;
+
+    try {
+      const response = await fetch("/api/me/chat", { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to clear chat");
+      setMessages([]);
+      setRecentChanges([]);
+    } catch (err) {
+      console.error("Error clearing chat:", err);
+      setError("Failed to clear chat");
+    }
+  };
+
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -214,6 +236,15 @@ export default function PrivateAssistantPage() {
             <div className="flex items-center gap-3">
               <ChatNav />
               <ThemeToggle />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearChat}
+                className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                title="Clear chat"
+              >
+                <TrashIcon />
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
