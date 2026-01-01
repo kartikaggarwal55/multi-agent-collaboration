@@ -2,6 +2,9 @@
 import { google, calendar_v3 } from "googleapis";
 import { prisma } from "./db";
 
+// Default timezone for formatting - prevents UTC issues on Vercel
+const DEFAULT_TIMEZONE = "America/Los_Angeles";
+
 export interface CalendarEvent {
   id: string;
   summary: string;
@@ -199,16 +202,19 @@ export function formatEventsForDisplay(events: CalendarEvent[]): string {
         year: "numeric",
         month: "long",
         day: "numeric",
+        timeZone: DEFAULT_TIMEZONE,
       });
 
       const timeStr = startDate.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
+        timeZone: DEFAULT_TIMEZONE,
       });
 
       const endTimeStr = endDate.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
+        timeZone: DEFAULT_TIMEZONE,
       });
 
       let line = `• ${dateStr}, ${timeStr}-${endTimeStr}: ${event.summary}`;
@@ -239,11 +245,13 @@ export function formatFreeBusyForDisplay(
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: DEFAULT_TIMEZONE,
   })} to ${endRange.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: DEFAULT_TIMEZONE,
   })}`;
 
   if (busyBlocks.length === 0) {
@@ -259,12 +267,15 @@ export function formatFreeBusyForDisplay(
         month: "long",
         day: "numeric",
         year: "numeric",
+        timeZone: DEFAULT_TIMEZONE,
       })}, ${start.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
+        timeZone: DEFAULT_TIMEZONE,
       })} - ${end.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
+        timeZone: DEFAULT_TIMEZONE,
       })}`;
     })
     .join("\n");

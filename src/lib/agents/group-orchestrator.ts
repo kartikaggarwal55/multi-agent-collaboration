@@ -121,6 +121,9 @@ IMPORTANT: This is how you respond to the group. Your public_message is what eve
   };
 }
 
+// Default timezone - must match calendar.ts
+const DEFAULT_TIMEZONE = "America/Los_Angeles";
+
 // Get current date/time formatted for the prompt with context
 function getCurrentDateTime(): string {
   const now = new Date();
@@ -132,23 +135,26 @@ function getCurrentDateTime(): string {
     hour: "numeric",
     minute: "2-digit",
     timeZoneName: "short",
+    timeZone: DEFAULT_TIMEZONE,
   });
 
-  const isoDate = now.toISOString().split("T")[0];
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth(); // 0-indexed
+  // Get date parts in the correct timezone
+  const year = parseInt(now.toLocaleString("en-US", { year: "numeric", timeZone: DEFAULT_TIMEZONE }));
+  const month = parseInt(now.toLocaleString("en-US", { month: "numeric", timeZone: DEFAULT_TIMEZONE })) - 1;
+  const day = now.toLocaleString("en-US", { day: "2-digit", timeZone: DEFAULT_TIMEZONE });
+  const monthStr = now.toLocaleString("en-US", { month: "2-digit", timeZone: DEFAULT_TIMEZONE });
+  const isoDate = `${year}-${monthStr}-${day}`;
 
   // Determine the year for upcoming months
-  const nextYear = currentYear + 1;
-  const upcomingMonthYear = currentMonth >= 10 ? nextYear : currentYear; // Nov/Dec → next year for Jan/Feb
+  const nextYear = year + 1;
+  const upcomingMonthYear = month >= 10 ? nextYear : year; // Nov/Dec → next year for Jan/Feb
 
   return `${formatted}
 ISO Date: ${isoDate}
-Timezone: ${timezone}
-Current Year: ${currentYear}
+Timezone: ${DEFAULT_TIMEZONE}
+Current Year: ${year}
 
-IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${currentYear} if that month has passed).`;
+IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${year} if that month has passed).`;
 }
 
 function generateSystemPrompt(
