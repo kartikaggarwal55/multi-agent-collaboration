@@ -101,6 +101,51 @@ export default function PrivateAssistantPage() {
     }
   }, [status]);
 
+  // Poll for new messages when tab is visible and not actively loading
+  useEffect(() => {
+    if (status !== "authenticated" || isLoading) return;
+
+    const pollInterval = 5000; // 5 seconds
+    let timeoutId: NodeJS.Timeout;
+
+    const pollForMessages = async () => {
+      // Only poll if document is visible
+      if (document.hidden) {
+        timeoutId = setTimeout(pollForMessages, pollInterval);
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/me/chat");
+        if (response.ok) {
+          const data = await response.json();
+          const newMessages = data.messages || [];
+
+          // Only update if message count changed (simple check to avoid unnecessary rerenders)
+          setMessages((prev) => {
+            if (prev.length !== newMessages.length) {
+              return newMessages;
+            }
+            // Check if last message ID differs
+            if (prev.length > 0 && newMessages.length > 0 &&
+                prev[prev.length - 1].id !== newMessages[newMessages.length - 1].id) {
+              return newMessages;
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+
+      timeoutId = setTimeout(pollForMessages, pollInterval);
+    };
+
+    timeoutId = setTimeout(pollForMessages, pollInterval);
+
+    return () => clearTimeout(timeoutId);
+  }, [status, isLoading]);
+
   // Scroll to bottom when messages change or on mount
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "instant" });

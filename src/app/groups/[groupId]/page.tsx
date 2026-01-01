@@ -284,6 +284,53 @@ export default function GroupPage({
     bottomRef.current?.scrollIntoView({ behavior: "instant" });
   }, [group?.messages]);
 
+  // Poll for new messages when tab is visible and not actively loading
+  useEffect(() => {
+    if (status !== "authenticated" || isLoading || isFetching) return;
+
+    const pollInterval = 5000; // 5 seconds
+    let timeoutId: NodeJS.Timeout;
+
+    const pollForMessages = async () => {
+      // Only poll if document is visible
+      if (document.hidden) {
+        timeoutId = setTimeout(pollForMessages, pollInterval);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/groups/${groupId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const newMessages = data.group?.messages || [];
+
+          // Only update if message count changed
+          setGroup((prev) => {
+            if (!prev) return prev;
+            const prevMessages = prev.messages || [];
+            if (prevMessages.length !== newMessages.length) {
+              return { ...prev, ...data.group };
+            }
+            // Check if last message ID differs
+            if (prevMessages.length > 0 && newMessages.length > 0 &&
+                prevMessages[prevMessages.length - 1].id !== newMessages[newMessages.length - 1].id) {
+              return { ...prev, ...data.group };
+            }
+            return prev;
+          });
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+
+      timeoutId = setTimeout(pollForMessages, pollInterval);
+    };
+
+    timeoutId = setTimeout(pollForMessages, pollInterval);
+
+    return () => clearTimeout(timeoutId);
+  }, [status, isLoading, isFetching, groupId]);
+
   // Assign colors to participants
   useEffect(() => {
     if (group?.participants) {
