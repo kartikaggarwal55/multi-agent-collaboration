@@ -91,6 +91,7 @@ export function ThemeToggle() {
                  hover:bg-accent/50 active:scale-95
                  transition-all duration-200 ease-out"
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+      title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
     >
       {/* Icon container with rotation animation */}
       <div

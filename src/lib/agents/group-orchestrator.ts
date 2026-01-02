@@ -7,6 +7,7 @@ import { getUserProfile, formatProfileForPrompt } from "@/lib/profile";
 import { createCalendarToolsForUser, executeCalendarTool } from "./calendar-tools";
 import { createGmailToolsForUser, executeGmailTool } from "./gmail-tools";
 import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./maps-tools";
+import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
 import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion } from "../types";
 
 const anthropic = new Anthropic();
@@ -68,7 +69,7 @@ export interface GroupParticipant {
 }
 
 // emit_turn tool - submit response to the group
-function createEmitTurnTool(humanNames: string[]) {
+function createEmitTurnTool(humanNames: string[], assistantNames: string[]) {
   return {
     name: "emit_turn",
     description: `Submit your response to the group. Call this tool ONCE at the end of your turn after gathering all needed information.
@@ -76,13 +77,13 @@ function createEmitTurnTool(humanNames: string[]) {
 IMPORTANT: This is how you respond to the group. Your public_message is what everyone will see.
 - If you used tools (calendar, gmail, web search), synthesize results into a helpful response
 - If you couldn't find what was asked, explain what you searched and suggest alternatives
-- Set skip_turn=true ONLY if you have absolutely nothing to contribute`,
+- Set skip_turn=true if you weren't addressed and have no relevant new information to share`,
     input_schema: {
       type: "object" as const,
       properties: {
         skip_turn: {
           type: "boolean",
-          description: "Set true ONLY if you have absolutely nothing to add. If you searched and found info, set false.",
+          description: "Set true if: (1) you weren't @mentioned AND (2) no one asked you a question AND (3) you have no relevant info about your owner that would change the plan. If you have useful information to share, set false.",
         },
         public_message: {
           type: "string",
@@ -91,6 +92,15 @@ IMPORTANT: This is how you respond to the group. Your public_message is what eve
         next_action: {
           type: "string",
           enum: ["CONTINUE", "WAIT_FOR_USER", "DONE"],
+          description: `Choose based on who needs to respond next:
+- CONTINUE: You @mentioned another ASSISTANT with a question. They should respond before stopping.
+- WAIT_FOR_USER: No assistant was asked a question; waiting on human input.
+- DONE: Planning complete, all decisions confirmed.
+
+ASSISTANTS you can @mention: ${assistantNames.join(", ")}
+
+PRIORITY RULE: If you @mentioned an assistant with a question → CONTINUE (even if you also asked your owner something)
+Otherwise, if waiting on human input → WAIT_FOR_USER`,
         },
         state_patch: {
           type: "object",
@@ -107,10 +117,26 @@ IMPORTANT: This is how you respond to the group. Your public_message is what eve
                 },
               },
             },
+            pending_decisions: {
+              type: "array",
+              description: "Track decisions that need explicit confirmation. Update this list as decisions are proposed, confirmed, or resolved.",
+              items: {
+                type: "object",
+                properties: {
+                  topic: { type: "string", description: "What the decision is about (e.g., 'Resort choice', 'Travel dates')" },
+                  status: { type: "string", enum: ["proposed", "awaiting_confirmation", "confirmed"] },
+                  options: { type: "array", items: { type: "string" }, description: "The proposed options" },
+                  confirmedValue: { type: "string", description: "The confirmed choice (when status is confirmed)" },
+                  confirmationsNeeded: { type: "array", items: { type: "string" }, description: "User names who need to confirm (for multi-user decisions)" },
+                  confirmationsReceived: { type: "array", items: { type: "string" }, description: "User names who have confirmed so far" },
+                },
+                required: ["topic", "status"],
+              },
+            },
             suggested_next_steps: {
               type: "array",
               items: { type: "string" },
-              description: "Concise pending decisions (e.g., 'Decide on venue', 'Confirm dates'). Replace the entire list each time - remove items that are resolved, add new ones. Keep to 3-5 items max."
+              description: "Concise pending actions (e.g., 'Decide on venue', 'Confirm dates'). Replace the entire list each time - remove items that are resolved, add new ones. Keep to 3-5 items max."
             },
             stage: { type: "string", enum: ["negotiating", "searching", "waiting_for_user", "converged"] },
           },
@@ -159,6 +185,7 @@ IMPORTANT: When user mentions upcoming months like "January", "February", etc., 
 
 function generateSystemPrompt(
   ownerName: string,
+  assistantName: string,
   ownerProfile: string[],
   otherParticipants: { name: string; kind: string }[],
   canonicalState: CanonicalState,
@@ -185,8 +212,15 @@ function generateSystemPrompt(
   const othersList = otherParticipants.map(p => `- ${p.name} (${p.kind})`).join("\n");
 
   const roleContext = isPrimaryResponder
-    ? `Your owner ${ownerName} just sent a message. You should respond helpfully.`
-    : `Another participant just spoke. Respond if you have something valuable to add or were asked a question.`;
+    ? `Your owner ${ownerName} just sent a message. You should respond helpfully on their behalf.`
+    : `Another participant just spoke. You are NOT the primary responder this turn.
+
+RESPOND only if ANY of these are true:
+1. You were explicitly @mentioned by name
+2. Another assistant asked YOU specifically a question
+3. You have relevant information about ${ownerName} (calendar conflicts, preferences, constraints) that would meaningfully change the plan
+
+Otherwise, SKIP your turn and let the conversation flow naturally.`;
 
   // Get other assistants for collaboration
   const otherAssistants = otherParticipants.filter(p => p.kind === "assistant").map(p => p.name);
@@ -203,11 +237,14 @@ ${roleContext}
 ## ${ownerName}'s Profile
 ${profileSection || "No profile stored yet."}
 
+Note: Profile data helps you understand preferences, but does NOT authorize you to make decisions on ${ownerName}'s behalf. Always ask for explicit confirmation on choices.
+
 ## Available Tools
 - ${tools}
 
+Note: For date calculations (day of week, upcoming weekends), use the date tools rather than calculating yourself.
+
 ## Current Plan State
-- Goal: ${canonicalState.goal || "Not set"}
 - Leading option: ${canonicalState.leadingOption || "None"}
 - Stage: ${canonicalState.stage}
 - Constraints:
@@ -216,17 +253,35 @@ ${constraints}
 ## Other Participants
 ${othersList}
 
-## CRITICAL: How to Collaborate
+## Communication & Ownership Boundaries (CRITICAL)
 
-**NEVER ask other users questions directly.** You can ONLY ask questions to:
-1. Your own owner (${ownerName})
-2. Other ASSISTANTS (${otherAssistants.join(", ") || "none"})
+You are ${assistantName}, assistant to ${ownerName}. This creates strict boundaries:
 
-When you need information from another user (${otherHumans.join(", ") || "none"}):
-- Ask their ASSISTANT instead: "@[Assistant Name], does [User] prefer X or Y?"
-- The other assistant will either answer (if they know) or ask their user
+**You CAN directly address:**
+- Your owner (${ownerName}) - ask questions, make recommendations, confirm their decisions
+- Other assistants (${otherAssistants.join(", ") || "none"}) - coordinate, ask them to check with their users
 
-This creates proactive collaboration between assistants!
+**You should NEVER directly address:**
+- Other human participants (${otherHumans.join(", ") || "none"})
+- Don't ask questions to users who aren't your owner
+- Don't make decisions or confirmations on behalf of other users
+
+**Correct patterns:**
+- WRONG: "@OtherUser - does this work for you?"
+- RIGHT: "@OtherUser's Assistant - can you check with your user if this works?"
+
+- WRONG: "Booked for everyone!" (when only your owner confirmed)
+- RIGHT: "Booked for ${ownerName}! @OtherAssistant - has your user booked theirs?"
+
+**Speaking authority:**
+- You can ONLY confirm decisions, bookings, or actions for ${ownerName}
+- You cannot say "confirmed for both" unless the other user's assistant confirmed their part
+- If you need another user's input, ask their assistant to get it
+
+**When another assistant asks about your owner's preference:**
+- Do NOT assume or answer on their behalf
+- ASK your owner first: "@${ownerName} - does X work for you?"
+- Only confirm after your owner explicitly responds
 
 ## Tool Use Strategy
 When using tools to find information:
@@ -246,15 +301,60 @@ When the conversation needs information (flights, hotels, places, availability):
 3. Present OPTIONS with prices, times, and booking links
 4. If another assistant asked you something, RESEARCH and RESPOND with findings
 
-## When to Skip (IMPORTANT)
-Set skip_turn=true ONLY if you have NOTHING to contribute. When you skip:
-- Do NOT provide a public_message - your turn is completely silent
-- Do NOT announce that you're skipping - just skip silently
+## Decision Discipline (CRITICAL)
 
-Skip when:
-- You were not addressed and have nothing new to add
+**Never assume implicit confirmation.** Options must be explicitly confirmed before building on them.
+
+Decision states:
+- **Proposed**: Options mentioned, no confirmation requested yet
+- **Awaiting confirmation**: User was asked to decide, waiting for response
+- **Confirmed**: User explicitly stated their choice
+
+**Key rules:**
+1. If you ask multiple questions in one message, each is a SEPARATE decision - a user answering one does NOT confirm the others
+2. Vague affirmations are NOT confirmation of specific options - if unclear what they're confirming, ask explicitly
+3. Before discussing details that depend on a choice, verify the parent choice is confirmed
+4. When a decision is still pending, surface it clearly before moving forward
+
+**Multi-user decisions:**
+When a decision affects multiple participants, each must confirm SEPARATELY:
+- Your owner's confirmation applies ONLY to them, not to other users
+- Other users' confirmations must come through their own assistants
+- Only mark something as "confirmed for all" when each assistant has confirmed their user's agreement
+- After your owner confirms, prompt other assistants: "@OtherAssistant - has your user confirmed?"
+
+**Example - single user:**
+- Asked: "Option A or Option B? And which date?"
+- User replied: "Option A"
+- Option is CONFIRMED, but date is STILL PENDING
+
+**Example - multi-user:**
+- Asked everyone: "Does the proposed plan work?"
+- Your owner replied: "Yes"
+- Your owner is CONFIRMED, but other users are STILL PENDING until their assistants confirm
+
+Track decisions in state_patch.pending_decisions and update their status as the conversation progresses.
+
+## When to Skip vs Respond (CRITICAL)
+${isPrimaryResponder ? `As the PRIMARY responder (your owner just spoke), you should generally respond.` : `As a NON-PRIMARY responder, you should usually SKIP unless directly addressed or have relevant information about ${ownerName} that would meaningfully change the plan being discussed.`}
+
+**SKIP your turn (skip_turn=true) when ALL of these are true:**
+1. You were NOT @mentioned by name
+2. The message wasn't a question directed at you
+3. You have NO relevant information about ${ownerName} that would change the current plan
+
+**ALSO SKIP (regardless of above) when:**
 - Another assistant already covered exactly what you would say
-- The message is directed at another user's assistant, not you
+- A human was just asked a question or for a decision - let them respond first
+
+**RESPOND (skip_turn=false) when ANY of these are true:**
+${isPrimaryResponder ? `- Your owner ${ownerName} just spoke and you can help represent their interests` : `- You were explicitly @mentioned (e.g., "@${otherParticipants.find(p => p.kind === "assistant")?.name || "Assistant"}")`}
+- Another assistant asked YOU specifically a question
+- You have information about ${ownerName} (calendar conflicts, preferences, constraints) that would meaningfully change the plan being discussed
+
+When skipping:
+- Do NOT provide a public_message
+- Do NOT announce that you're skipping - just skip silently
 
 ## Response Format
 - Be concise (2-4 sentences for main points)
@@ -293,10 +393,9 @@ export async function* orchestrateGroupRun(
   triggerMessageId: string,
   participants: GroupParticipant[],
   messages: GroupMessageData[],
-  canonicalState: CanonicalState,
-  goal: string
+  canonicalState: CanonicalState
 ): AsyncGenerator<GroupCollaborationEvent> {
-  let currentState = { ...canonicalState, goal };
+  let currentState = { ...canonicalState };
   const humans = participants.filter(p => p.kind === "human");
   const assistants = participants.filter(p => p.kind === "assistant");
 
@@ -315,6 +414,11 @@ export async function* orchestrateGroupRun(
   const orderedAssistants = ownerAssistant
     ? [ownerAssistant, ...assistants.filter(a => a.id !== ownerAssistant.id)]
     : assistants;
+
+  // Debug logging for ordering
+  console.log(`[Orchestrator] Trigger user: ${triggeringUserId}, Last message by: ${lastUserMessage?.authorName}`);
+  console.log(`[Orchestrator] Owner assistant found: ${ownerAssistant?.displayName || "NONE"}`);
+  console.log(`[Orchestrator] Assistant order: ${orderedAssistants.map(a => a.displayName).join(" -> ")}`);
 
   yield { type: "status", status: "Processing..." };
 
@@ -347,7 +451,6 @@ export async function* orchestrateGroupRun(
         otherParticipants,
         currentState,
         messages,
-        goal,
         assistant.hasCalendar || false,
         assistant.hasGmail || false,
         isMapsConfigured(),
@@ -356,6 +459,7 @@ export async function* orchestrateGroupRun(
       );
 
       if (result.skipped) {
+        console.log(`[Orchestrator] ${assistant.displayName} skipped their turn`);
         continue;
       }
 
@@ -387,6 +491,7 @@ export async function* orchestrateGroupRun(
         messages.push(messageData);
         yield { type: "message", message: messageData };
         anyPosted = true;
+        console.log(`[Orchestrator] ${assistant.displayName} posted, next_action: ${result.nextAction}`);
       }
 
       // Apply state patch
@@ -408,6 +513,18 @@ export async function* orchestrateGroupRun(
         });
         yield { type: "state_update", state: currentState };
         yield { type: "done", stopReason: "HANDOFF_DONE" };
+        return;
+      }
+
+      // WAIT_FOR_USER: Stop immediately - a human was asked a question or confirmation
+      if (result.nextAction === "WAIT_FOR_USER") {
+        currentState.stage = "waiting_for_user";
+        await prisma.group.update({
+          where: { id: groupId },
+          data: { canonicalState: JSON.stringify(currentState), lastActiveAt: new Date() },
+        });
+        yield { type: "state_update", state: currentState };
+        yield { type: "done", stopReason: "WAIT_FOR_USER" };
         return;
       }
 
@@ -453,7 +570,6 @@ async function callAssistant(
   otherParticipants: { name: string; kind: string }[],
   canonicalState: CanonicalState,
   messages: GroupMessageData[],
-  goal: string,
   hasCalendar: boolean,
   hasGmail: boolean,
   hasMaps: boolean,
@@ -462,6 +578,7 @@ async function callAssistant(
 ): Promise<AssistantResult> {
   const systemPrompt = generateSystemPrompt(
     ownerName,
+    assistantName,
     ownerProfile,
     otherParticipants,
     canonicalState,
@@ -471,14 +588,17 @@ async function callAssistant(
     isPrimary
   );
 
-  const userMessage = `${goal ? `**Goal**: ${goal}\n\n` : ""}${formatConversation(messages, assistantName)}`;
+  const userMessage = formatConversation(messages, assistantName);
 
   // Build tools
   const humanNames = otherParticipants.filter(p => p.kind === "human").map(p => p.name);
   humanNames.push(ownerName);
 
+  const assistantNames = otherParticipants.filter(p => p.kind === "assistant").map(p => p.name);
+  assistantNames.push(assistantName); // Include self
+
   const tools: Anthropic.Messages.Tool[] = [
-    createEmitTurnTool(humanNames) as unknown as Anthropic.Messages.Tool,
+    createEmitTurnTool(humanNames, assistantNames) as unknown as Anthropic.Messages.Tool,
     {
       type: "web_search_20250305",
       name: "web_search",
@@ -504,6 +624,9 @@ async function callAssistant(
   if (hasMaps) {
     tools.push(...MAPS_TOOLS);
   }
+
+  // Date utilities always available - for accurate day-of-week calculations
+  tools.push(...DATE_TOOLS);
 
   let response = await callWithRetry(() =>
     anthropic.messages.create({
@@ -585,6 +708,11 @@ async function callAssistant(
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
       } else if (isMapseTool(toolUse.name)) {
         const result = await executeMapseTool(toolUse.name, toolUse.input as Record<string, unknown>);
+        toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
+      } else if (isDateTool(toolUse.name)) {
+        console.log(`[DateTool] Calling ${toolUse.name} with:`, toolUse.input);
+        const result = executeDateTool(toolUse.name, toolUse.input as Record<string, unknown>);
+        console.log(`[DateTool] Result:`, result.substring(0, 200));
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
       } else {
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: "Unknown tool" });
@@ -692,6 +820,10 @@ function applyStatePatch(
 
   if (patch.suggested_next_steps) {
     newState.suggestedNextSteps = patch.suggested_next_steps;
+  }
+
+  if (patch.pending_decisions) {
+    newState.pendingDecisions = patch.pending_decisions;
   }
 
   if (patch.add_constraints) {

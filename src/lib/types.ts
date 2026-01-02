@@ -43,6 +43,16 @@ export interface ParticipantConstraint {
   addedAt: string;
 }
 
+// Decision tracking - prevents implicit assumptions
+export interface PendingDecision {
+  topic: string;                    // e.g., "Resort choice", "Travel dates"
+  status: "proposed" | "awaiting_confirmation" | "confirmed";
+  options?: string[];               // The proposed options (if any)
+  confirmedValue?: string;          // What was confirmed
+  confirmationsNeeded?: string[];   // Participant IDs who need to confirm (for multi-user)
+  confirmationsReceived?: string[]; // Participant IDs who have confirmed
+}
+
 // CHANGED: Added structured canonical state for right panel
 export interface CanonicalState {
   goal: string;
@@ -50,6 +60,7 @@ export interface CanonicalState {
   statusSummary: string[];
   constraints: ParticipantConstraint[];
   openQuestions: OpenQuestion[];
+  pendingDecisions: PendingDecision[];
   suggestedNextSteps: string[];
   stage: "negotiating" | "searching" | "waiting_for_user" | "converged";
   lastUpdatedAt: string;
@@ -75,6 +86,7 @@ export interface StatePatch {
   add_constraints?: Array<{ participantId: string; constraint: string }>;
   add_questions?: Array<{ target: string; question: string }>; // Dynamic participant names
   resolve_questions?: string[]; // question IDs to mark resolved
+  pending_decisions?: PendingDecision[]; // Replace entire pending decisions list
   suggested_next_steps?: string[];
   stage?: CanonicalState["stage"];
 }

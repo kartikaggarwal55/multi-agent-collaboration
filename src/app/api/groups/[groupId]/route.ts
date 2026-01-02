@@ -102,6 +102,10 @@ export async function GET(
     let canonicalState;
     try {
       canonicalState = JSON.parse(group.canonicalState);
+      // Ensure pendingDecisions exists for existing conversations
+      if (canonicalState && !canonicalState.pendingDecisions) {
+        canonicalState.pendingDecisions = [];
+      }
     } catch {
       canonicalState = null;
     }
@@ -122,12 +126,10 @@ export async function GET(
       group: {
         id: group.id,
         title: group.title,
-        goal: group.goal,
         createdBy: group.createdBy,
         participants,
         messages,
         canonicalState,
-        summary: group.summary,
         lastActiveAt: group.lastActiveAt,
         createdAt: group.createdAt,
       },
@@ -143,7 +145,7 @@ export async function GET(
   }
 }
 
-// PATCH /api/groups/[groupId] - Update group (goal, title)
+// PATCH /api/groups/[groupId] - Update group title
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ groupId: string }> }
@@ -171,25 +173,10 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { title, goal } = body;
+    const { title } = body;
 
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
-    if (goal !== undefined) {
-      updateData.goal = goal;
-      // Also update canonical state goal
-      const group = await prisma.group.findUnique({
-        where: { id: groupId },
-        select: { canonicalState: true },
-      });
-      if (group) {
-        const state = JSON.parse(group.canonicalState);
-        state.goal = goal;
-        state.lastUpdatedAt = new Date().toISOString();
-        state.lastUpdatedBy = session.user.id;
-        updateData.canonicalState = JSON.stringify(state);
-      }
-    }
 
     const updatedGroup = await prisma.group.update({
       where: { id: groupId },

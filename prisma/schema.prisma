@@ -104,15 +104,11 @@ model PrivateMessage {
 model Group {
   id          String   @id @default(cuid())
   title       String?
-  goal        String?
   createdById String
   createdBy   User     @relation("GroupCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
-  // Canonical state stored as JSON
+  // Canonical state stored as JSON (contains goal, constraints, decisions, etc.)
   canonicalState String @default("{}")
-
-  // Summary for backward compatibility
-  summary     String?
 
   members     GroupMember[]
   messages    GroupMessage[]

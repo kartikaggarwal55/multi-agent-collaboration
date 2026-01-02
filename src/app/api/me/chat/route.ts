@@ -28,6 +28,11 @@ import {
   isMapseTool,
   isMapsConfigured,
 } from "@/lib/agents/maps-tools";
+import {
+  DATE_TOOLS,
+  executeDateTool,
+  isDateTool,
+} from "@/lib/agents/date-tools";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic();
@@ -87,6 +92,7 @@ export async function GET() {
       }),
       getUserProfile(userId),
     ]);
+    console.log("[Profile] GET - userId:", userId, "profileItems:", profileItems);
 
     // Check if user has calendar and gmail connected
     // Find all Google accounts and prefer the one with most scopes
@@ -223,6 +229,9 @@ export async function POST(request: Request) {
       tools.push(...MAPS_TOOLS);
     }
 
+    // Date utilities always available
+    tools.push(...DATE_TOOLS);
+
     // Create streaming response
     const stream = new ReadableStream({
       async start(controller) {
@@ -343,6 +352,16 @@ export async function POST(request: Request) {
                     tool_use_id: block.id,
                     content: toolResult,
                   });
+                } else if (isDateTool(block.name)) {
+                  const toolResult = executeDateTool(
+                    block.name,
+                    block.input as Record<string, unknown>
+                  );
+                  toolResults.push({
+                    type: "tool_result",
+                    tool_use_id: block.id,
+                    content: toolResult,
+                  });
                 } else if (block.name === "web_search") {
                   sendEvent("status", { status: `Searching the web...` });
                   // Web search is server-side - results come as text blocks
@@ -352,7 +371,9 @@ export async function POST(request: Request) {
 
             // If emit_turn was called, extract response and exit loop
             if (emitTurnResult) {
+              console.log("[Profile] Path: emit_turn was called");
               assistantContent = emitTurnResult.message || "";
+              console.log("[Profile] emit_turn profile_updates:", JSON.stringify(emitTurnResult.profile_updates, null, 2));
               if (emitTurnResult.profile_updates?.should_update) {
                 profileUpdate = {
                   should_update: true,
@@ -371,6 +392,7 @@ export async function POST(request: Request) {
               (block) => block.type === "tool_use" && block.name === "web_search"
             );
             if (hasWebSearch) {
+              console.log("[Profile] Path: web_search fallback (no emit_turn)");
               // Extract any text response from web search
               for (const block of response.content) {
                 if (block.type === "text") {
@@ -397,14 +419,28 @@ export async function POST(request: Request) {
               continue;
             }
 
-            // No tool use - extract text response
+            // No tool use - LLM returned plain text without emit_turn
+            // Force emit_turn on next round by continuing the loop
+            console.log("[Profile] Path: no tool use - forcing emit_turn on next round");
+
+            // Store the text response in case we need to use it
+            let textResponse = "";
             for (const block of response.content) {
               if (block.type === "text") {
-                assistantContent = block.text;
+                textResponse = block.text;
                 break;
               }
             }
-            break;
+
+            // Add the text response to messages and continue to force emit_turn
+            if (textResponse) {
+              messages = [
+                ...messages,
+                { role: "assistant", content: textResponse },
+                { role: "user", content: "Please use the emit_turn tool to submit your response with any profile updates." },
+              ];
+            }
+            continue; // Continue loop to force emit_turn
           }
 
           // Final fallback if somehow we still have no response
@@ -428,7 +464,14 @@ export async function POST(request: Request) {
           });
 
           // Handle profile updates
+          console.log("[Profile] Update check:", {
+            hasProfileUpdate: !!profileUpdate,
+            shouldUpdate: profileUpdate?.should_update,
+            hasNewItems: !!profileUpdate?.new_profile_items,
+            itemCount: profileUpdate?.new_profile_items?.length,
+          });
           if (profileUpdate?.should_update && profileUpdate.new_profile_items) {
+            console.log("[Profile] Saving profile items:", profileUpdate.new_profile_items);
             await updateUserProfile(
               userId,
               profileUpdate.new_profile_items,
@@ -439,6 +482,7 @@ export async function POST(request: Request) {
               items: profileUpdate.new_profile_items,
               changes: profileUpdate.changes,
             });
+            console.log("[Profile] Sent profile update event");
           }
 
           // CHANGED: Notify if calendar reconnect needed

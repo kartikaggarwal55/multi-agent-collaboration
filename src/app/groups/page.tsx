@@ -75,7 +75,6 @@ interface GroupMember {
 interface Group {
   id: string;
   title: string | null;
-  goal: string | null;
   memberCount: number;
   messageCount: number;
   members: GroupMember[];
@@ -300,11 +299,6 @@ export default function GroupsPage() {
                     <h3 className="font-medium truncate">
                       {group.title || "Untitled Group"}
                     </h3>
-                    {group.goal && (
-                      <p className="text-sm text-muted-foreground truncate mt-1">
-                        {group.goal}
-                      </p>
-                    )}
                     <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <UsersIcon />

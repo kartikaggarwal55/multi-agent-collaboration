@@ -37,7 +37,7 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { content, goal } = body;
+    const { content } = body;
 
     const MAX_MESSAGE_LENGTH = 10000;
     if (!content?.trim()) {
@@ -68,14 +68,6 @@ export async function POST(
 
     if (!group) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
-    }
-
-    // Update goal if provided
-    if (goal !== undefined) {
-      await prisma.group.update({
-        where: { id: groupId },
-        data: { goal },
-      });
     }
 
     // Get user's display name
@@ -161,23 +153,23 @@ export async function POST(
     let canonicalState: CanonicalState;
     try {
       canonicalState = JSON.parse(group.canonicalState);
+      // Ensure pendingDecisions exists for existing conversations
+      if (!canonicalState.pendingDecisions) {
+        canonicalState.pendingDecisions = [];
+      }
     } catch {
       canonicalState = {
-        goal: goal || group.goal || "",
+        goal: "",
         leadingOption: "",
         statusSummary: [],
         constraints: [],
         openQuestions: [],
+        pendingDecisions: [],
         suggestedNextSteps: [],
         stage: "negotiating",
         lastUpdatedAt: new Date().toISOString(),
         lastUpdatedBy: "system",
       };
-    }
-
-    // Update goal in canonical state if provided
-    if (goal) {
-      canonicalState.goal = goal;
     }
 
     // Create SSE stream
@@ -216,8 +208,7 @@ export async function POST(
             userMessage.id,
             participants,
             existingMessages,
-            canonicalState,
-            goal || group.goal || ""
+            canonicalState
           )) {
             switch (event.type) {
               case "message":
@@ -242,6 +233,10 @@ export async function POST(
                 if (finalGroup) {
                   try {
                     finalState = JSON.parse(finalGroup.canonicalState);
+                    // Ensure pendingDecisions exists for existing conversations
+                    if (!finalState.pendingDecisions) {
+                      finalState.pendingDecisions = [];
+                    }
                   } catch {
                     // Keep current state
                   }

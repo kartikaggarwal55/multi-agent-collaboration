@@ -46,7 +46,6 @@ export async function GET() {
     const groups = memberships.map((m) => ({
       id: m.group.id,
       title: m.group.title,
-      goal: m.group.goal,
       createdBy: m.group.createdBy,
       memberCount: m.group.members.length,
       messageCount: m.group._count.messages,
@@ -80,20 +79,20 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { title, goal } = body;
+    const { title } = body;
 
     // Create group with creator as first member
     const group = await prisma.group.create({
       data: {
         title: title || null,
-        goal: goal || null,
         createdById: session.user.id,
         canonicalState: JSON.stringify({
-          goal: goal || "",
+          goal: "",
           leadingOption: "",
           statusSummary: [],
           constraints: [],
           openQuestions: [],
+          pendingDecisions: [],
           suggestedNextSteps: [],
           stage: "negotiating",
           lastUpdatedAt: new Date().toISOString(),
@@ -121,7 +120,6 @@ export async function POST(request: NextRequest) {
       group: {
         id: group.id,
         title: group.title,
-        goal: group.goal,
         members: group.members.map((m) => ({
           id: m.user.id,
           name: m.user.name,

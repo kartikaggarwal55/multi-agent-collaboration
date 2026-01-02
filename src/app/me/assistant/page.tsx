@@ -88,6 +88,9 @@ export default function PrivateAssistantPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScroll = useRef(true);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -146,10 +149,26 @@ export default function PrivateAssistantPage() {
     return () => clearTimeout(timeoutId);
   }, [status, isLoading]);
 
-  // Scroll to bottom when messages change or on mount
+  // Smart scroll: only auto-scroll if user is near bottom or on initial load
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "instant" });
+    if (isInitialLoad.current || shouldAutoScroll.current) {
+      bottomRef.current?.scrollIntoView({ behavior: isInitialLoad.current ? "instant" : "smooth" });
+      if (messages.length > 0) {
+        isInitialLoad.current = false;
+      }
+    }
   }, [messages]);
+
+  // Track scroll position to determine if user is near bottom
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    // Consider "near bottom" if within 150px
+    shouldAutoScroll.current = distanceFromBottom < 150;
+  };
 
   const fetchChatData = async () => {
     try {
@@ -166,6 +185,9 @@ export default function PrivateAssistantPage() {
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
+
+    // Always scroll to bottom when user sends a message
+    shouldAutoScroll.current = true;
 
     setIsLoading(true);
     setError(null);
@@ -295,6 +317,7 @@ export default function PrivateAssistantPage() {
                 size="sm"
                 onClick={() => signOut({ callbackUrl: "/auth/signin" })}
                 className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                title="Sign out"
               >
                 <LogOutIcon />
               </Button>
@@ -303,7 +326,7 @@ export default function PrivateAssistantPage() {
         </header>
 
         {/* Messages - FULL WIDTH */}
-        <ScrollArea className="flex-1 min-h-0">
+        <ScrollArea className="flex-1 min-h-0" viewportRef={scrollContainerRef} onScroll={handleScroll}>
           <div className="px-6 py-4 space-y-5">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">

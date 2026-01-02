@@ -4,12 +4,12 @@ import { formatProfileForPrompt } from "../profile";
 // Tool for emitting structured response with profile updates
 export const PRIVATE_EMIT_TURN_TOOL = {
   name: "emit_turn",
-  description: `Submit your final response to the user. Call this tool ONCE at the end of your turn after you have gathered all needed information.
+  description: `Submit your final response to the user. Call this tool ONCE at the end of your turn.
 
-IMPORTANT: This is how you respond to the user. Your message parameter is what they will see.
-- If you used other tools (gmail_search, calendar, etc.), synthesize the results into a helpful response
-- If you couldn't find what the user asked for, explain what you searched and suggest alternatives
-- Never call emit_turn multiple times per turn`,
+IMPORTANT:
+- Your message parameter is what the user will see
+- If user shared preferences/facts about themselves, you MUST set profile_updates.should_update=true AND provide new_profile_items with the COMPLETE updated profile list
+- Don't just say "I've updated your profile" without actually providing the new_profile_items array`,
   input_schema: {
     type: "object" as const,
     properties: {
@@ -28,7 +28,7 @@ IMPORTANT: This is how you respond to the user. Your message parameter is what t
             type: "array",
             items: { type: "string" },
             description:
-              "The COMPLETE updated profile as a list of preference/fact strings. This REPLACES the current profile. Keep 8-20 items max. Use format like 'Diet: vegetarian' or 'Timing: prefers early nights'.",
+              "REQUIRED when should_update=true. The COMPLETE updated profile as a list of strings. Include ALL existing items plus new ones. This REPLACES the current profile. Format: 'Category: detail' (e.g., 'Diet: vegetarian', 'Travel: prefers driving under 4hrs').",
           },
           changes: {
             type: "array",
@@ -193,8 +193,24 @@ The emit_turn tool requires:
 - **message**: Your complete response to the user (this is what they see)
 - **profile_updates**: Object with should_update (boolean), and if updating: new_profile_items (full list) and changes
 
-If no profile update needed, set should_update: false.
-If updating, provide the COMPLETE new profile list - it replaces the current one.`;
+**CRITICAL: Profile updates only work if you provide ALL of these:**
+1. should_update: true
+2. new_profile_items: ["item1", "item2", ...] - the COMPLETE updated list
+3. changes: [{ type: "added", after: "new item", reason: "why" }, ...]
+
+Example when adding preferences:
+\`\`\`json
+{
+  "message": "Got it! I've saved your preferences.",
+  "profile_updates": {
+    "should_update": true,
+    "new_profile_items": ["Diet: vegetarian", "Timing: prefers early nights", "NEW ITEM HERE"],
+    "changes": [{ "type": "added", "after": "NEW ITEM HERE", "reason": "User stated preference" }]
+  }
+}
+\`\`\`
+
+If no profile update needed, set should_update: false (no other fields required).`;
 }
 
 // Format messages for context

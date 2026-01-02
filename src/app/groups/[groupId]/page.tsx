@@ -34,24 +34,26 @@ const SparklesIcon = () => (
   </svg>
 );
 
-const TargetIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <circle cx="12" cy="12" r="6" />
-    <circle cx="12" cy="12" r="2" />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 6L9 17L4 12" />
-  </svg>
-);
-
 const ClockIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="10" />
     <path d="M12 6V12L16 14" />
+  </svg>
+);
+
+const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+  >
+    <path d="M6 9l6 6 6-6" />
   </svg>
 );
 
@@ -116,10 +118,20 @@ function renderMentions(
   currentUserName: string | null | undefined,
   participants: Participant[]
 ): React.ReactNode[] {
-  // Build list of all participant names (sorted by length descending for longest-match-first)
-  const participantNames = participants
-    .map(p => p.displayName)
-    .sort((a, b) => b.length - a.length);
+  // Build list of all participant names including first names (sorted by length descending for longest-match-first)
+  // This allows matching @FirstName when the system knows the full name
+  const participantNames: { name: string; displayName: string }[] = [];
+  for (const p of participants) {
+    // Add full display name
+    participantNames.push({ name: p.displayName, displayName: p.displayName });
+    // Add first name if it's different from display name (for human participants)
+    const firstName = p.displayName.split(' ')[0];
+    if (firstName && firstName !== p.displayName && !p.displayName.includes("'")) {
+      participantNames.push({ name: firstName, displayName: p.displayName });
+    }
+  }
+  // Sort by name length descending for longest-match-first
+  participantNames.sort((a, b) => b.name.length - a.name.length);
 
   const userFirstName = currentUserName?.split(' ')[0] || '';
   const userFullName = currentUserName || '';
@@ -147,19 +159,20 @@ function renderMentions(
     const afterAt = remaining.slice(atIndex + 1);
     let matched = false;
 
-    for (const name of participantNames) {
+    for (const participant of participantNames) {
       // Check if afterAt starts with this name (case-insensitive)
-      if (afterAt.toLowerCase().startsWith(name.toLowerCase())) {
+      if (afterAt.toLowerCase().startsWith(participant.name.toLowerCase())) {
         // Make sure it's a word boundary (not followed by alphanumeric)
-        const nextChar = afterAt[name.length];
+        const nextChar = afterAt[participant.name.length];
         if (!nextChar || !/\w/.test(nextChar)) {
-          const mentionText = '@' + afterAt.slice(0, name.length);
+          const mentionText = '@' + afterAt.slice(0, participant.name.length);
 
           // Check if this is the current user (not their assistant)
+          // Use displayName to check against current user's full name
           const isCurrentUser = (
-            name.toLowerCase() === userFullName.toLowerCase() ||
-            name.toLowerCase() === userFirstName.toLowerCase()
-          ) && !name.toLowerCase().includes("'");
+            participant.displayName.toLowerCase() === userFullName.toLowerCase() ||
+            participant.displayName.toLowerCase() === userFirstName.toLowerCase()
+          ) && !participant.displayName.toLowerCase().includes("'");
 
           parts.push(
             <span
@@ -174,7 +187,7 @@ function renderMentions(
             </span>
           );
 
-          remaining = afterAt.slice(name.length);
+          remaining = afterAt.slice(participant.name.length);
           matched = true;
           break;
         }
@@ -227,7 +240,6 @@ interface Message {
 interface GroupData {
   id: string;
   title: string | null;
-  goal: string | null;
   participants: Participant[];
   messages: Message[];
   canonicalState: CanonicalState | null;
@@ -261,7 +273,6 @@ export default function GroupPage({
   const router = useRouter();
   const [group, setGroup] = useState<GroupData | null>(null);
   const [message, setMessage] = useState("");
-  const [goal, setGoal] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [currentlyTyping, setCurrentlyTyping] = useState<string | null>(null);
@@ -270,6 +281,9 @@ export default function GroupPage({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScroll = useRef(true);
+  const isInitialLoad = useRef(true);
   const [participantColorMap, setParticipantColorMap] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
@@ -280,9 +294,26 @@ export default function GroupPage({
     }
   }, [status, groupId, router]);
 
+  // Smart scroll: only auto-scroll if user is near bottom or on initial load
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "instant" });
+    if (isInitialLoad.current || shouldAutoScroll.current) {
+      bottomRef.current?.scrollIntoView({ behavior: isInitialLoad.current ? "instant" : "smooth" });
+      if (group?.messages && group.messages.length > 0) {
+        isInitialLoad.current = false;
+      }
+    }
   }, [group?.messages]);
+
+  // Track scroll position to determine if user is near bottom
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    // Consider "near bottom" if within 150px
+    shouldAutoScroll.current = distanceFromBottom < 150;
+  };
 
   // Poll for new messages when tab is visible and not actively loading
   useEffect(() => {
@@ -303,17 +334,33 @@ export default function GroupPage({
         if (response.ok) {
           const data = await response.json();
           const newMessages = data.group?.messages || [];
+          const newParticipants = data.group?.participants || [];
 
-          // Only update if message count changed
+          // Update if messages, participants, or canonical state changed
           setGroup((prev) => {
             if (!prev) return prev;
             const prevMessages = prev.messages || [];
+            const prevParticipants = prev.participants || [];
+
+            // Check message count
             if (prevMessages.length !== newMessages.length) {
               return { ...prev, ...data.group };
             }
-            // Check if last message ID differs
+            // Check last message ID
             if (prevMessages.length > 0 && newMessages.length > 0 &&
                 prevMessages[prevMessages.length - 1].id !== newMessages[newMessages.length - 1].id) {
+              return { ...prev, ...data.group };
+            }
+            // Check participant count (new member joined/left)
+            if (prevParticipants.length !== newParticipants.length) {
+              return { ...prev, ...data.group };
+            }
+            // Check if any participant's capabilities changed (calendar/gmail connected)
+            const prevCaps = prevParticipants.map((p: { id: string; hasCalendar?: boolean; hasGmail?: boolean }) =>
+              `${p.id}:${p.hasCalendar}:${p.hasGmail}`).join(',');
+            const newCaps = newParticipants.map((p: { id: string; hasCalendar?: boolean; hasGmail?: boolean }) =>
+              `${p.id}:${p.hasCalendar}:${p.hasGmail}`).join(',');
+            if (prevCaps !== newCaps) {
               return { ...prev, ...data.group };
             }
             return prev;
@@ -357,9 +404,6 @@ export default function GroupPage({
 
       const data = await response.json();
       setGroup(data.group);
-      if (data.group.goal) {
-        setGoal(data.group.goal);
-      }
     } catch (err) {
       console.error("Error fetching group:", err);
       setError("Failed to load group");
@@ -370,6 +414,9 @@ export default function GroupPage({
 
   const sendMessage = async () => {
     if (!message.trim() || isLoading) return;
+
+    // Always scroll to bottom when user sends a message
+    shouldAutoScroll.current = true;
 
     setIsLoading(true);
     setError(null);
@@ -386,7 +433,6 @@ export default function GroupPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           content: message,
-          goal: goal || undefined,
         }),
       });
 
@@ -419,7 +465,15 @@ export default function GroupPage({
                     if (!prev) return prev;
                     const exists = prev.messages.some((m) => m.id === data.id);
                     if (exists) return prev;
-                    return { ...prev, messages: [...prev.messages, data] };
+                    // Sort by createdAt to handle out-of-order SSE arrivals
+                    // Use id as tiebreaker for same-millisecond messages
+                    const newMessages = [...prev.messages, data].sort((a, b) => {
+                      const timeA = new Date(a.createdAt).getTime() || 0;
+                      const timeB = new Date(b.createdAt).getTime() || 0;
+                      if (timeA !== timeB) return timeA - timeB;
+                      return a.id.localeCompare(b.id); // Stable tiebreaker
+                    });
+                    return { ...prev, messages: newMessages };
                   });
 
                   // Update typing indicator
@@ -571,7 +625,6 @@ export default function GroupPage({
             </div>
             <div className="flex items-center gap-2">
               <ChatNav />
-              <ThemeToggle />
               <Button
                 variant="secondary"
                 size="sm"
@@ -581,12 +634,14 @@ export default function GroupPage({
                 <LinkIcon />
                 {copied ? "Copied!" : "Invite"}
               </Button>
+              <ThemeToggle />
               {isCreator && (
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowDeleteConfirm(true)}
                   className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                  title="Delete group"
                 >
                   <TrashIcon />
                 </Button>
@@ -596,6 +651,7 @@ export default function GroupPage({
                 size="sm"
                 onClick={() => signOut({ callbackUrl: "/auth/signin" })}
                 className="text-muted-foreground hover:text-foreground h-8 w-8 p-0"
+                title="Sign out"
               >
                 <LogOutIcon />
               </Button>
@@ -603,26 +659,8 @@ export default function GroupPage({
           </div>
         </header>
 
-        {/* Goal input */}
-        <div className="px-6 py-4 border-b border-border/30 goal-section">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2.5 text-primary shrink-0">
-              <div className="p-1.5 rounded-md bg-primary/10">
-                <TargetIcon />
-              </div>
-              <span className="text-xs font-semibold uppercase tracking-wider">Goal</span>
-            </div>
-            <Input
-              placeholder="What are we planning today?"
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              className="flex-1 h-11 bg-background/60 border-border/50 rounded-lg text-[15px] font-medium placeholder:text-muted-foreground/50"
-            />
-          </div>
-        </div>
-
         {/* Messages */}
-        <ScrollArea className="flex-1 min-h-0">
+        <ScrollArea className="flex-1 min-h-0" viewportRef={scrollContainerRef} onScroll={handleScroll}>
           <div className="px-6 py-4 space-y-4">
             {group.messages.length === 0 && (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
@@ -634,7 +672,7 @@ export default function GroupPage({
                 </div>
                 <h3 className="text-foreground font-semibold text-lg mb-2">Ready to collaborate</h3>
                 <p className="text-muted-foreground text-[15px] max-w-xs leading-relaxed">
-                  Set a goal above and send your first message to begin planning together
+                  Send your first message to begin planning together
                 </p>
               </div>
             )}
@@ -845,6 +883,8 @@ function StatePanel({
   getParticipantColor: (id: string, role: string) => { bg: string; text: string; border: string };
   getInitials: (name: string) => string;
 }) {
+  const [constraintsExpanded, setConstraintsExpanded] = useState(false);
+
   if (!canonicalState) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -893,42 +933,40 @@ function StatePanel({
         </div>
       )}
 
-      {/* Progress */}
-      {canonicalState.statusSummary && canonicalState.statusSummary.length > 0 && (
-        <div>
-          <SectionHeader>Progress</SectionHeader>
-          <ul className="space-y-2.5 list-none">
-            {canonicalState.statusSummary.map((item, i) => (
-              <li key={i} className="flex items-start gap-3 text-[14px] text-foreground/60 leading-[1.6]">
-                <CheckIcon />
-                <span className="flex-1">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Constraints */}
+      {/* Constraints - Collapsible */}
       {sessionConstraints.length > 0 && (
         <div>
-          <SectionHeader>Constraints</SectionHeader>
-          <ul className="space-y-2.5 list-none">
-            {sessionConstraints.map((c, i) => {
-              // Strip any leading dash/bullet from constraint text
-              const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
-              return (
-                <li key={i} className="flex items-start gap-3 text-[14px] text-foreground/55 leading-[1.6]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-foreground/25 mt-[9px] shrink-0" />
-                  <span className="flex-1">{constraintText}</span>
-                </li>
-              );
-            })}
-          </ul>
+          <button
+            onClick={() => setConstraintsExpanded(!constraintsExpanded)}
+            className="w-full flex items-center gap-3 text-left group"
+          >
+            <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-foreground/40 group-hover:text-foreground/60 transition-colors">
+              Constraints ({sessionConstraints.length})
+            </span>
+            <div className="flex-1 h-[1px] bg-border/40" />
+            <span className="text-foreground/30 group-hover:text-foreground/50 transition-colors">
+              <ChevronIcon expanded={constraintsExpanded} />
+            </span>
+          </button>
+          {constraintsExpanded && (
+            <ul className="space-y-2.5 list-none mt-4">
+              {sessionConstraints.map((c, i) => {
+                // Strip any leading dash/bullet from constraint text
+                const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
+                return (
+                  <li key={i} className="flex items-start gap-3 text-[14px] text-foreground/55 leading-[1.6]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-foreground/25 mt-[9px] shrink-0" />
+                    <span className="flex-1">{constraintText}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       )}
 
       {/* Participants */}
-      <div className="pt-6 mt-6 border-t border-border/30">
+      <div>
         <SectionHeader>Participants</SectionHeader>
         <div className="grid grid-cols-1 gap-2.5">
           {participants.map((p) => {
