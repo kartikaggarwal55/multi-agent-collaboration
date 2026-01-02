@@ -93,13 +93,13 @@ IMPORTANT: This is how you respond to the group. Your public_message is what eve
           type: "string",
           enum: ["CONTINUE", "WAIT_FOR_USER", "DONE"],
           description: `Choose based on who needs to respond next:
-- CONTINUE: You @mentioned another ASSISTANT with a question. They should respond before stopping.
-- WAIT_FOR_USER: No assistant was asked a question; waiting on human input.
+- CONTINUE: You @mentioned another ASSISTANT (to ask, inform, or coordinate). They should respond before stopping.
+- WAIT_FOR_USER: No assistant was asked a question; waiting on human input to proceed.
 - DONE: Planning complete, all decisions confirmed.
 
 ASSISTANTS you can @mention: ${assistantNames.join(", ")}
 
-PRIORITY RULE: If you @mentioned an assistant with a question → CONTINUE (even if you also asked your owner something)
+PRIORITY RULE: If you @mentioned an assistant → CONTINUE (even if you also asked your owner something)
 Otherwise, if waiting on human input → WAIT_FOR_USER`,
         },
         state_patch: {
