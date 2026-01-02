@@ -114,7 +114,6 @@ export async function GET(
       group: {
         id: group.id,
         title: group.title,
-        goal: group.goal,
         createdBy: group.createdBy,
         memberCount: group.members.length,
       },
