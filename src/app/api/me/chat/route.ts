@@ -42,6 +42,11 @@ const MAX_RATE_LIMIT_RETRIES = 2;
 
 const MAX_MESSAGE_LENGTH = 10000; // 10k characters max
 
+// Helper to strip <cite> tags from web search results while preserving content
+function stripCiteTags(text: string): string {
+  return text.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/g, "$1");
+}
+
 // Helper for rate-limited API calls with exponential backoff
 async function callWithRetry<T>(
   fn: () => Promise<T>,
@@ -447,6 +452,10 @@ export async function POST(request: Request) {
           if (!assistantContent) {
             assistantContent = "I apologize, but I wasn't able to complete your request. Please try again or rephrase your question.";
           }
+
+          // Strip cite tags from web search results
+          assistantContent = stripCiteTags(assistantContent);
+
           const assistantMessage = await prisma.privateMessage.create({
             data: {
               userId,

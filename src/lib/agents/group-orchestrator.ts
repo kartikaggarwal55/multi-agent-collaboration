@@ -15,6 +15,11 @@ const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
 const RATE_LIMIT_RETRY_DELAY_MS = 2000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 
+// Helper to strip <cite> tags from web search results while preserving content
+function stripCiteTags(text: string): string {
+  return text.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/g, "$1");
+}
+
 // Helper for rate-limited API calls with exponential backoff
 async function callWithRetry<T>(
   fn: () => Promise<T>,
@@ -810,7 +815,7 @@ async function callAssistant(
 
   return {
     skipped,
-    content: finalContent,
+    content: stripCiteTags(finalContent),
     citations: allCitations,
     statePatch: emitTurnResult?.state_patch || null,
     nextAction: emitTurnResult?.next_action || "WAIT_FOR_USER",
