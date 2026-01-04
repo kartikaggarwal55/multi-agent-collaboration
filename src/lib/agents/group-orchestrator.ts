@@ -11,7 +11,7 @@ import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
 import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion } from "../types";
 
 const anthropic = new Anthropic();
-const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-sonnet-4-20250514";
+const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
 const RATE_LIMIT_RETRY_DELAY_MS = 2000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 

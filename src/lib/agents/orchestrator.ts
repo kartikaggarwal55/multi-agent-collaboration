@@ -39,7 +39,7 @@ import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./m
 const anthropic = new Anthropic();
 
 // Model configuration
-const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-sonnet-4-5";
+const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
 
 // CHANGED: Dynamic stopping configuration
 const MAX_ASSISTANT_TURNS_PER_RUN = 12; // Hard cap on total assistant turns

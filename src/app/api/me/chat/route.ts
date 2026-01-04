@@ -36,7 +36,7 @@ import {
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic();
-const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-sonnet-4-20250514";
+const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
 const RATE_LIMIT_RETRY_DELAY_MS = 2000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 
