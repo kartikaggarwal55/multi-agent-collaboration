@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -542,6 +543,7 @@ function MessageBubble({
             ) : (
               <div className="prose prose-sm prose-invert max-w-none prose-chat">
                 <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
                   components={{
                     p: ({ children }) => <p className="text-sm mb-2 last:mb-0 leading-relaxed">{children}</p>,
                     ul: ({ children }) => <ul className="text-sm list-none pl-0 mb-2 space-y-1.5">{children}</ul>,
@@ -557,6 +559,23 @@ function MessageBubble({
                       <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                         {children}
                       </a>
+                    ),
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-3">
+                        <table className="min-w-full text-sm border-collapse">{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => (
+                      <thead className="bg-muted/50">{children}</thead>
+                    ),
+                    th: ({ children }) => (
+                      <th className="px-3 py-2 text-left font-semibold text-foreground/90 border-b border-border">{children}</th>
+                    ),
+                    td: ({ children }) => (
+                      <td className="px-3 py-2 text-foreground/80 border-b border-border/50">{children}</td>
+                    ),
+                    tr: ({ children }) => (
+                      <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
                     ),
                   }}
                 >

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, use } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -726,6 +727,7 @@ export default function GroupPage({
                         {msg.role === "assistant" ? (
                           <div className="prose prose-sm prose-invert max-w-none prose-chat">
                             <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
                               components={{
                                 p: ({ children }) => (
                                   <p className="text-[15px] mb-2.5 last:mb-0 leading-[1.65] text-foreground/90">
@@ -750,6 +752,23 @@ export default function GroupPage({
                                   >
                                     {children}
                                   </a>
+                                ),
+                                table: ({ children }) => (
+                                  <div className="overflow-x-auto my-3">
+                                    <table className="min-w-full text-sm border-collapse">{children}</table>
+                                  </div>
+                                ),
+                                thead: ({ children }) => (
+                                  <thead className="bg-muted/50">{children}</thead>
+                                ),
+                                th: ({ children }) => (
+                                  <th className="px-3 py-2 text-left font-semibold text-foreground/90 border-b border-border">{children}</th>
+                                ),
+                                td: ({ children }) => (
+                                  <td className="px-3 py-2 text-foreground/80 border-b border-border/50">{children}</td>
+                                ),
+                                tr: ({ children }) => (
+                                  <tr className="hover:bg-muted/30 transition-colors">{children}</tr>
                                 ),
                               }}
                             >
