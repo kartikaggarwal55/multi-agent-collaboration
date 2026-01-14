@@ -489,3 +489,27 @@ export function formatGmailMessageForDisplay(msg: GmailMessage): string {
 
   return output;
 }
+
+/**
+ * Validate that Gmail access is actually working (not just that token exists)
+ * Makes a lightweight API call to verify the token is valid
+ */
+export async function validateGmailAccess(userId: string): Promise<boolean> {
+  const result = await getOAuth2Client(userId);
+
+  if ("error" in result) {
+    return false;
+  }
+
+  const gmail = google.gmail({ version: "v1", auth: result.client });
+
+  try {
+    // Make a minimal API call - just get profile (very lightweight)
+    await gmail.users.getProfile({ userId: "me" });
+    return true;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log("Gmail validation failed:", errorMessage);
+    return false;
+  }
+}

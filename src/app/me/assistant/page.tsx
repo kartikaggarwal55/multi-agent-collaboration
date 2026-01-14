@@ -85,6 +85,8 @@ export default function PrivateAssistantPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [profile, setProfile] = useState<string[]>([]);
   const [recentChanges, setRecentChanges] = useState<ProfileChange[]>([]);
+  const [hasCalendar, setHasCalendar] = useState<boolean | null>(null);
+  const [hasGmail, setHasGmail] = useState<boolean | null>(null);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,6 +180,8 @@ export default function PrivateAssistantPage() {
       const data = await response.json();
       setMessages(data.messages || []);
       setProfile(data.profile || []);
+      setHasCalendar(data.hasCalendar ?? null);
+      setHasGmail(data.hasGmail ?? null);
     } catch (err) {
       console.error("Error fetching chat:", err);
       setError("Failed to load chat history");
@@ -269,6 +273,11 @@ export default function PrivateAssistantPage() {
       console.error("Error clearing chat:", err);
       setError("Failed to clear chat");
     }
+  };
+
+  const reconnectGoogle = () => {
+    // Sign out and redirect to sign-in page which will trigger fresh OAuth consent
+    signOut({ callbackUrl: "/auth/signin?prompt=consent" });
   };
 
   if (status === "loading") {
@@ -412,18 +421,36 @@ export default function PrivateAssistantPage() {
       {/* Right panel - Profile */}
       <div className="w-[340px] shrink-0 border-l border-border/30 glass-panel relative overflow-hidden">
         <div className="h-full flex flex-col">
-          {/* User info */}
-          <div className="px-5 py-4 border-b border-border/30 flex items-center gap-3">
-            <Avatar className="h-10 w-10 border-2 border-primary/30">
-              <AvatarImage src={session.user?.image || undefined} />
-              <AvatarFallback className="bg-primary/20 text-primary font-medium">
-                {session.user?.name?.[0] || <UserIcon />}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{session.user?.name || "User"}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{session.user?.email}</p>
+          {/* User info with connection status */}
+          <div className="px-5 py-4 border-b border-border/30">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Avatar className="h-10 w-10 border-2 border-primary/30">
+                  <AvatarImage src={session.user?.image || undefined} />
+                  <AvatarFallback className="bg-primary/20 text-primary font-medium">
+                    {session.user?.name?.[0] || <UserIcon />}
+                  </AvatarFallback>
+                </Avatar>
+                {/* Red dot indicator if reconnection needed */}
+                {(hasCalendar === false || hasGmail === false) && (
+                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 rounded-full border-2 border-background" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{session.user?.name || "User"}</p>
+                <p className="text-[11px] text-muted-foreground truncate">{session.user?.email}</p>
+              </div>
             </div>
+            {/* Reconnect banner - only shows when needed */}
+            {(hasCalendar === false || hasGmail === false) && (
+              <button
+                onClick={reconnectGoogle}
+                className="mt-3 w-full flex items-center justify-between px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/15 transition-colors text-left"
+              >
+                <span className="text-[12px]">Google access expired</span>
+                <span className="text-[11px] font-medium">Reconnect →</span>
+              </button>
+            )}
           </div>
 
           <ScrollArea className="flex-1 min-h-0">

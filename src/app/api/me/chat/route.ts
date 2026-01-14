@@ -17,11 +17,13 @@ import {
   executeCalendarTool,
   isCalendarTool,
 } from "@/lib/agents/calendar-tools";
+import { validateCalendarAccess } from "@/lib/calendar";
 import {
   GMAIL_TOOLS,
   executeGmailTool,
   isGmailTool,
 } from "@/lib/agents/gmail-tools";
+import { validateGmailAccess } from "@/lib/gmail";
 import {
   MAPS_TOOLS,
   executeMapseTool,
@@ -108,8 +110,16 @@ export async function GET() {
     const account = accounts.find(a => a.scope?.includes("gmail"))
       || accounts.find(a => a.scope?.includes("calendar"))
       || accounts[0];
-    const hasCalendar = !!account?.access_token && account?.scope?.includes("calendar");
-    const hasGmail = !!account?.access_token && account?.scope?.includes("gmail");
+
+    // Validate that tokens actually work (not just exist)
+    const hasCalendarScope = !!account?.access_token && account?.scope?.includes("calendar");
+    const hasGmailScope = !!account?.access_token && account?.scope?.includes("gmail");
+
+    // Run validations in parallel for efficiency
+    const [hasCalendar, hasGmail] = await Promise.all([
+      hasCalendarScope ? validateCalendarAccess(userId) : Promise.resolve(false),
+      hasGmailScope ? validateGmailAccess(userId) : Promise.resolve(false),
+    ]);
 
     return new Response(
       JSON.stringify({
@@ -195,8 +205,15 @@ export async function POST(request: Request) {
       || accounts.find(a => a.scope?.includes("calendar"))
       || accounts[0];
 
-    const hasCalendar = !!account?.access_token && account?.scope?.includes("calendar");
-    const hasGmail = !!account?.access_token && account?.scope?.includes("gmail");
+    // Validate that tokens actually work (not just exist)
+    const hasCalendarScope = !!account?.access_token && account?.scope?.includes("calendar");
+    const hasGmailScope = !!account?.access_token && account?.scope?.includes("gmail");
+
+    // Run validations in parallel for efficiency
+    const [hasCalendar, hasGmail] = await Promise.all([
+      hasCalendarScope ? validateCalendarAccess(userId) : Promise.resolve(false),
+      hasGmailScope ? validateGmailAccess(userId) : Promise.resolve(false),
+    ]);
 
     // Reverse to chronological order (oldest first)
     const recentMessages = recentMessagesDesc.reverse();

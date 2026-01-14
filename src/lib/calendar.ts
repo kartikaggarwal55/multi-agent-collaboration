@@ -282,3 +282,27 @@ export function formatFreeBusyForDisplay(
 
   return `Busy times from ${rangeStr}:\n${busyText}`;
 }
+
+/**
+ * Validate that Calendar access is actually working (not just that token exists)
+ * Makes a lightweight API call to verify the token is valid
+ */
+export async function validateCalendarAccess(userId: string): Promise<boolean> {
+  const result = await getOAuth2Client(userId);
+
+  if ("error" in result) {
+    return false;
+  }
+
+  const calendar = google.calendar({ version: "v3", auth: result.client });
+
+  try {
+    // Make a minimal API call - just list calendar list (very lightweight)
+    await calendar.calendarList.list({ maxResults: 1 });
+    return true;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log("Calendar validation failed:", errorMessage);
+    return false;
+  }
+}
