@@ -110,6 +110,10 @@ model Group {
   // Canonical state stored as JSON (contains goal, constraints, decisions, etc.)
   canonicalState String @default("{}")
 
+  // Active assistant status for turn indicator (JSON string or null)
+  // Stored in DB so ALL users can see which assistant is currently working
+  activeStatus String?
+
   members     GroupMember[]
   messages    GroupMessage[]
 

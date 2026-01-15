@@ -110,6 +110,16 @@ export async function GET(
       canonicalState = null;
     }
 
+    // Parse active status (for turn indicator - visible to all users)
+    let activeStatus = null;
+    if (group.activeStatus) {
+      try {
+        activeStatus = JSON.parse(group.activeStatus);
+      } catch {
+        activeStatus = null;
+      }
+    }
+
     // Format messages
     const messages = group.messages.map((m) => ({
       id: m.id,
@@ -130,6 +140,7 @@ export async function GET(
         participants,
         messages,
         canonicalState,
+        activeStatus,
         lastActiveAt: group.lastActiveAt,
         createdAt: group.createdAt,
       },

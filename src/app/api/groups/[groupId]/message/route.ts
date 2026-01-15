@@ -220,10 +220,24 @@ export async function POST(
               case "status":
                 sendEvent("status", { status: event.status });
                 break;
+              case "assistant_status":
+                // Save to DB so polling users can see it
+                await prisma.group.update({
+                  where: { id: groupId },
+                  data: { activeStatus: JSON.stringify(event.assistantStatus) },
+                });
+                // Also send to SSE stream for immediate update to sender
+                sendEvent("assistant_status", event.assistantStatus);
+                break;
               case "error":
                 sendEvent("error", { error: event.error });
                 break;
               case "done":
+                // Clear active status in DB
+                await prisma.group.update({
+                  where: { id: groupId },
+                  data: { activeStatus: null },
+                });
                 // Get final state
                 const finalGroup = await prisma.group.findUnique({
                   where: { id: groupId },

@@ -1,5 +1,22 @@
 // Core types for the multi-agent collaboration system
 
+// Assistant status for turn indicator - broadcast to all users
+export type AssistantStatusType =
+  | "thinking"
+  | "searching_calendar"
+  | "searching_gmail"
+  | "searching_web"
+  | "searching_maps"
+  | "writing_response";
+
+export interface AssistantStatus {
+  type: AssistantStatusType;
+  assistantId: string;       // e.g., "userId-assistant"
+  assistantName: string;     // e.g., "Kartik's Assistant"
+  detail?: string;           // e.g., "Checking January availability..."
+  timestamp: number;         // For debouncing/staleness checks
+}
+
 export interface Participant {
   id: string;
   kind: "human" | "assistant";

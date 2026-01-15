@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { CanonicalState } from "@/lib/types";
+import { CanonicalState, AssistantStatus } from "@/lib/types";
 import { ChatNav } from "@/components/chat-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -101,6 +101,43 @@ const TrashIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6" />
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
+// Status icons for turn indicator
+const BrainIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2" />
+    <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2" />
+  </svg>
+);
+
+const GlobeIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="2" y1="12" x2="22" y2="12" />
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+  </svg>
+);
+
+const MailIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
+);
+
+const MapPinIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+    <circle cx="12" cy="10" r="3" />
+  </svg>
+);
+
+const PencilIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    <path d="m15 5 4 4" />
   </svg>
 );
 
@@ -277,6 +314,7 @@ export default function GroupPage({
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [currentlyTyping, setCurrentlyTyping] = useState<string | null>(null);
+  const [activeStatus, setActiveStatus] = useState<AssistantStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -336,6 +374,10 @@ export default function GroupPage({
           const data = await response.json();
           const newMessages = data.group?.messages || [];
           const newParticipants = data.group?.participants || [];
+          const newActiveStatus = data.group?.activeStatus || null;
+
+          // Update active status from polling (visible to ALL users)
+          setActiveStatus(newActiveStatus);
 
           // Update if messages, participants, or canonical state changed
           setGroup((prev) => {
@@ -405,6 +447,10 @@ export default function GroupPage({
 
       const data = await response.json();
       setGroup(data.group);
+      // Also set activeStatus if present (for page refresh while assistant is working)
+      if (data.group?.activeStatus) {
+        setActiveStatus(data.group.activeStatus);
+      }
     } catch (err) {
       console.error("Error fetching group:", err);
       setError("Failed to load group");
@@ -493,6 +539,8 @@ export default function GroupPage({
                   );
                 } else if (eventType === "status") {
                   setCurrentlyTyping(data.status);
+                } else if (eventType === "assistant_status") {
+                  setActiveStatus(data);
                 } else if (eventType === "error") {
                   setError(data.error);
                 } else if (eventType === "done") {
@@ -502,6 +550,7 @@ export default function GroupPage({
                     );
                   }
                   setCurrentlyTyping(null);
+                  setActiveStatus(null);
                 }
               } catch (e) {
                 console.error("Failed to parse SSE data:", e);
@@ -519,6 +568,7 @@ export default function GroupPage({
     } finally {
       setIsLoading(false);
       setCurrentlyTyping(null);
+      setActiveStatus(null);
     }
   };
 
@@ -787,20 +837,12 @@ export default function GroupPage({
               );
             })}
 
-            {isLoading && currentlyTyping && (
-              <div className="flex items-center gap-3 animate-message-enter">
-                <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                  <BotIcon />
-                </div>
-                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-card border border-border/50">
-                  <div className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" style={{ animationDelay: "0ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" style={{ animationDelay: "150ms" }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" style={{ animationDelay: "300ms" }} />
-                  </div>
-                  <span className="text-xs text-muted-foreground ml-1">{currentlyTyping}</span>
-                </div>
-              </div>
+            {/* Turn Indicator - shows when assistant is active */}
+            {(activeStatus || (isLoading && currentlyTyping)) && (
+              <TurnIndicator
+                activeStatus={activeStatus}
+                fallbackText={currentlyTyping}
+              />
             )}
 
             <div ref={bottomRef} />
@@ -891,6 +933,61 @@ export default function GroupPage({
   );
 }
 
+// Turn Indicator Component - shows assistant activity status
+function TurnIndicator({
+  activeStatus,
+  fallbackText,
+}: {
+  activeStatus: AssistantStatus | null;
+  fallbackText: string | null;
+}) {
+  // Map status type to icon and label
+  const getStatusInfo = (type: string) => {
+    switch (type) {
+      case "thinking":
+        return { icon: <BrainIcon />, label: "thinking" };
+      case "searching_calendar":
+        return { icon: <CalendarIcon />, label: "checking calendar" };
+      case "searching_gmail":
+        return { icon: <MailIcon />, label: "searching emails" };
+      case "searching_web":
+        return { icon: <GlobeIcon />, label: "searching web" };
+      case "searching_maps":
+        return { icon: <MapPinIcon />, label: "searching places" };
+      case "writing_response":
+        return { icon: <PencilIcon />, label: "writing response" };
+      default:
+        return { icon: <BrainIcon />, label: "processing" };
+    }
+  };
+
+  const statusInfo = activeStatus
+    ? getStatusInfo(activeStatus.type)
+    : { icon: <BrainIcon />, label: fallbackText || "Processing" };
+
+  const displayName = activeStatus?.assistantName || fallbackText || "Assistant";
+
+  return (
+    <div className="flex items-center gap-3 animate-message-enter">
+      <div className="h-8 w-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary animate-subtle-pulse">
+        {statusInfo.icon}
+      </div>
+      <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-card border border-border/50 shadow-sm">
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" style={{ animationDelay: "0ms" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" style={{ animationDelay: "150ms" }} />
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-typing-dot" style={{ animationDelay: "300ms" }} />
+        </div>
+        <span className="text-sm text-foreground/80">
+          <span className="font-medium text-foreground/90">{displayName}</span>
+          {" "}
+          <span className="text-muted-foreground">{statusInfo.label}...</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function StatePanel({
   canonicalState,
   participants,
@@ -937,18 +1034,18 @@ function StatePanel({
         </div>
       )}
 
-      {/* Next Steps - Action items */}
+      {/* Next Steps */}
       {canonicalState.suggestedNextSteps && canonicalState.suggestedNextSteps.length > 0 && (
         <div>
           <SectionHeader accent>Next Steps</SectionHeader>
-          <ol className="space-y-3">
+          <div className="space-y-3">
             {canonicalState.suggestedNextSteps.map((step, i) => (
-              <li key={i} className="flex items-start gap-3 text-[14px] leading-[1.6]">
+              <div key={`step-${i}`} className="flex items-start gap-3 text-[14px] leading-[1.6]">
                 <span className="w-6 h-6 rounded-lg bg-primary/15 text-primary font-semibold text-[12px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
                 <span className="text-foreground/85">{step}</span>
-              </li>
+              </div>
             ))}
-          </ol>
+          </div>
         </div>
       )}
 

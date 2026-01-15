@@ -8,7 +8,7 @@ import { createCalendarToolsForUser, executeCalendarTool } from "./calendar-tool
 import { createGmailToolsForUser, executeGmailTool } from "./gmail-tools";
 import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./maps-tools";
 import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
-import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion } from "../types";
+import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion, AssistantStatus, AssistantStatusType } from "../types";
 
 const anthropic = new Anthropic();
 const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
@@ -50,6 +50,7 @@ export type GroupCollaborationEvent =
   | { type: "state_update"; state: CanonicalState }
   | { type: "error"; error: string }
   | { type: "status"; status: string }
+  | { type: "assistant_status"; assistantStatus: AssistantStatus }
   | { type: "done"; stopReason: StopReason };
 
 export interface GroupMessageData {
@@ -379,16 +380,46 @@ When skipping:
 - Do NOT provide a public_message
 - Do NOT announce that you're skipping - just skip silently
 
-## Response Format
-- Be concise (2-4 sentences for main points)
-- **Always include clickable links inline** in markdown format: [Link Text](url)
-  - Flights: [View on Google Flights](url) or airline booking pages
-  - Hotels: [Book on Hotels.com](url) or hotel websites
-  - Restaurants/Places: [View on Google Maps](url) or [Reserve on OpenTable](url)
-  - Emails: [Open in Gmail](url)
-  - Calendar events: [View in Calendar](url)
-- Use @mentions when addressing assistants or your owner
-- Update state_patch with new constraints, leading options, etc.
+## Response Format (CRITICAL for readability)
+
+Structure your messages for quick scanning. Users read on mobile and in busy chats.
+
+**Start with a 1-line summary** if your message has multiple points:
+> "Found 3 flight options and checked ${ownerName}'s calendar - here's what works:"
+
+**Use headers** to separate distinct topics:
+> ### Flights
+> ### Calendar Conflicts
+> ### Next Steps
+
+**Use bullet points** for lists and options - never wall-of-text:
+> - **Option A**: Southwest $180, departs 9am [Book here](url)
+> - **Option B**: United $220, departs 2pm [Book here](url)
+
+**Bold the key info** users need to see:
+> - **Price**: $180 roundtrip
+> - **Dates**: Jan 15-18
+> - **Conflict**: ${ownerName} has a meeting on the 16th
+
+**Use tables** for comparing 3+ options:
+| Flight | Price | Departs | Link |
+|--------|-------|---------|------|
+| Southwest | $180 | 9am | [Book](url) |
+
+**Keep paragraphs short** (1-2 sentences max). Break up longer explanations.
+
+**Links are mandatory** - always include clickable links inline:
+- Flights: [View on Google Flights](url) or airline booking pages
+- Hotels: [Book on Hotels.com](url) or hotel websites
+- Restaurants/Places: [View on Google Maps](url)
+- Emails: [Open in Gmail](url)
+- Calendar events: [View in Calendar](url)
+
+**End with a clear question or action** if you need a response:
+> @${ownerName} - Option A or B?
+
+Use @mentions when addressing assistants or your owner.
+Update state_patch with new constraints, leading options, etc.
 
 ## Next Steps (Important)
 Keep suggested_next_steps as a short list (3-5 items) of concise pending decisions.
@@ -443,7 +474,19 @@ export async function* orchestrateGroupRun(
   console.log(`[Orchestrator] Owner assistant found: ${ownerAssistant?.displayName || "NONE"}`);
   console.log(`[Orchestrator] Assistant order: ${orderedAssistants.map(a => a.displayName).join(" -> ")}`);
 
-  yield { type: "status", status: "Processing..." };
+  // Helper to create status
+  const createStatus = (
+    type: AssistantStatusType,
+    assistantId: string,
+    assistantName: string,
+    detail?: string
+  ): AssistantStatus => ({
+    type,
+    assistantId,
+    assistantName,
+    detail,
+    timestamp: Date.now(),
+  });
 
   let anyPosted = false;
   let round = 0;
@@ -459,6 +502,12 @@ export async function* orchestrateGroupRun(
     const owner = humans.find(h => h.id === assistant.ownerHumanId);
 
     if (!owner) continue;
+
+    // Emit thinking status for this assistant
+    yield {
+      type: "assistant_status",
+      assistantStatus: createStatus("thinking", assistant.id, assistant.displayName),
+    };
 
     const ownerProfile = owner.userId ? await getUserProfile(owner.userId) : [];
 
