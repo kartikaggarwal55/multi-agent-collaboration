@@ -784,6 +784,26 @@ export default function GroupPage({
                                     {renderMentionsInChildren(children, session.user?.name, group.participants)}
                                   </p>
                                 ),
+                                h1: ({ children }) => (
+                                  <h3 className="text-[16px] font-semibold mb-2 mt-3 first:mt-0 text-foreground">
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </h3>
+                                ),
+                                h2: ({ children }) => (
+                                  <h3 className="text-[16px] font-semibold mb-2 mt-3 first:mt-0 text-foreground">
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </h3>
+                                ),
+                                h3: ({ children }) => (
+                                  <h4 className="text-[15px] font-semibold mb-2 mt-3 first:mt-0 text-foreground">
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </h4>
+                                ),
+                                h4: ({ children }) => (
+                                  <h5 className="text-[14px] font-semibold mb-1.5 mt-2 first:mt-0 text-foreground/90">
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </h5>
+                                ),
                                 ul: ({ children }) => (
                                   <ul className="text-[15px] list-none pl-0 mb-2.5 space-y-2">{children}</ul>
                                 ),
@@ -792,6 +812,21 @@ export default function GroupPage({
                                     <span className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-[9px] shrink-0" />
                                     <span>{renderMentionsInChildren(children, session.user?.name, group.participants)}</span>
                                   </li>
+                                ),
+                                strong: ({ children }) => (
+                                  <strong className="font-semibold text-foreground">
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </strong>
+                                ),
+                                em: ({ children }) => (
+                                  <em>
+                                    {renderMentionsInChildren(children, session.user?.name, group.participants)}
+                                  </em>
+                                ),
+                                blockquote: ({ children }) => (
+                                  <blockquote className="border-l-2 border-primary/30 pl-3 my-2 text-foreground/80">
+                                    {children}
+                                  </blockquote>
                                 ),
                                 a: ({ href, children }) => (
                                   <a
