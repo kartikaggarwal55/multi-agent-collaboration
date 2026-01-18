@@ -9,6 +9,7 @@ import { createGmailToolsForUser, executeGmailTool } from "./gmail-tools";
 import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./maps-tools";
 import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
 import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion, AssistantStatus, AssistantStatusType } from "../types";
+import { filterMessageForPrivacy } from "./privacy-filter";
 
 const anthropic = new Anthropic();
 const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
@@ -537,13 +538,32 @@ export async function* orchestrateGroupRun(
 
       // Create and save message
       if (result.content) {
+        // Emit status: applying privacy filter
+        yield {
+          type: "assistant_status",
+          assistantStatus: createStatus("writing_response", assistant.id, assistant.displayName, "Reviewing for privacy..."),
+        };
+
+        // Apply privacy filter before sending message
+        const allParticipantNames = participants.map(p => p.displayName);
+        const filterResult = await filterMessageForPrivacy(
+          result.content,
+          currentState,
+          owner.displayName,
+          allParticipantNames
+        );
+
+        if (filterResult.wasModified) {
+          console.log(`[PrivacyFilter] Modified message from ${assistant.displayName}`);
+        }
+
         const messageData: GroupMessageData = {
           id: crypto.randomUUID(),
           groupId,
           authorId: assistant.id,
           authorName: assistant.displayName,
           role: "assistant",
-          content: result.content,
+          content: filterResult.filteredMessage,
           citations: result.citations.length > 0 ? result.citations : undefined,
           createdAt: new Date().toISOString(),
         };
