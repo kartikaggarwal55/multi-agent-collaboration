@@ -982,7 +982,7 @@ export default function GroupPage({
 
 // Section header component for consistency
 const SectionHeader = ({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) => (
-  <div className="flex items-center gap-3 mb-4">
+  <div className="flex items-center gap-3 mb-2">
     <span className={`text-[13px] font-semibold uppercase tracking-[0.08em] ${accent ? 'text-primary' : 'text-foreground/50'}`}>
       {children}
     </span>
@@ -1177,29 +1177,63 @@ function StatePanel({
         <div>
           <button
             onClick={() => setConstraintsExpanded(!constraintsExpanded)}
-            className="w-full flex items-center gap-2 text-left group"
+            className="w-full flex items-center gap-3 text-left group mb-2"
           >
-            <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-foreground/50 group-hover:text-foreground/70 transition-colors leading-none">
-              Constraints ({sessionConstraints.length})
+            <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-primary group-hover:text-primary/80 transition-colors">
+              Constraints
             </span>
-            <div className="flex-1 h-[1px] bg-border/40" />
+            <div className="flex-1 h-[1px] bg-primary/30" />
             <span className="text-foreground/40 group-hover:text-foreground/60 transition-colors flex items-center">
               <ChevronIcon expanded={constraintsExpanded} />
             </span>
           </button>
           {constraintsExpanded && (
-            <div className="space-y-1 mt-2.5">
-              {sessionConstraints.map((c, i) => {
-                const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
-                return (
-                  <div key={i} className="flex items-start gap-2 text-[15px] text-foreground/60 leading-[1.35] py-0.5">
-                    <span className="w-2 flex justify-center shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-[7px]" />
-                    </span>
-                    <span>{constraintText}</span>
+            <div className="space-y-3">
+              {(() => {
+                // Group constraints by participantId
+                const grouped = sessionConstraints.reduce((acc, c) => {
+                  const key = c.participantId || 'general';
+                  if (!acc[key]) acc[key] = [];
+                  acc[key].push(c);
+                  return acc;
+                }, {} as Record<string, typeof sessionConstraints>);
+
+                // Convert to title case
+                const toTitleCase = (str: string) =>
+                  str.split(' ').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                  ).join(' ');
+
+                // Get display name for a participant
+                const getDisplayName = (id: string) => {
+                  if (id === 'general') return 'General';
+                  const participant = participants.find(p =>
+                    p.id === id ||
+                    p.displayName.toLowerCase() === id.toLowerCase() ||
+                    p.displayName.split(' ')[0].toLowerCase() === id.toLowerCase()
+                  );
+                  const name = participant?.displayName || id;
+                  return toTitleCase(name);
+                };
+
+                return Object.entries(grouped).map(([participantId, constraints], idx) => (
+                  <div key={participantId}>
+                    <div className="text-[14px] font-semibold text-foreground/80 mb-1">
+                      {getDisplayName(participantId)}
+                    </div>
+                    <div className="space-y-0.5">
+                      {constraints.map((c, i) => {
+                        const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
+                        return (
+                          <div key={i} className="text-[15px] text-foreground/60 leading-[1.6]">
+                            {constraintText}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                );
-              })}
+                ));
+              })()}
             </div>
           )}
         </div>
@@ -1209,18 +1243,18 @@ function StatePanel({
       <div>
         <button
           onClick={() => setParticipantsExpanded(!participantsExpanded)}
-          className="w-full flex items-center gap-2 text-left group"
+          className="w-full flex items-center gap-3 text-left group mb-2"
         >
-          <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-foreground/50 group-hover:text-foreground/70 transition-colors leading-none">
-            Participants ({participants.length})
+          <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-primary group-hover:text-primary/80 transition-colors">
+            Participants
           </span>
-          <div className="flex-1 h-[1px] bg-border/40" />
+          <div className="flex-1 h-[1px] bg-primary/30" />
           <span className="text-foreground/40 group-hover:text-foreground/60 transition-colors flex items-center">
             <ChevronIcon expanded={participantsExpanded} />
           </span>
         </button>
         {participantsExpanded && (
-          <div className="space-y-1 mt-2.5">
+          <div className="space-y-1">
             {participants.map((p) => {
               const isAI = p.kind === "assistant";
               return (
