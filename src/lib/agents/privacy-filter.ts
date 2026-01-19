@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CanonicalState } from "../types";
 
 const anthropic = new Anthropic();
-const FILTER_MODEL = "claude-3-5-haiku-20241022";
+const FILTER_MODEL = "claude-3-5-haiku";
 
 interface PrivacyFilterContext {
   conversationGoal: string;
@@ -22,86 +22,86 @@ interface FilterResult {
 }
 
 /**
- * Information Disclosure Framework
+ * Privacy Filter - Goal-Oriented Disclosure Framework
  *
- * Categories of information and their disclosure rules:
+ * Core principle: For each piece of information, ask:
+ * 1. Is this necessary to achieve the current goal?
+ * 2. Would a more abstract version serve the same purpose?
+ * 3. Does the audience need this specific detail, or just the implication?
  *
- * 1. CALENDAR DATA
- *    - Disclose: Available time slots, general busy periods, conflicts with proposed times
- *    - Redact: Meeting titles, attendees, meeting descriptions, private event details
- *    - Exception: If meeting is directly relevant to goal (e.g., planning dinner and existing reservation)
+ * Decision types:
+ * - KEEP: Directly enables progress, removing would confuse, user chose to share
+ * - ABSTRACT: Implication matters but specific detail doesn't
+ * - REMOVE: Unrelated to goal, third-party details, irrelevant private matters
  *
- * 2. EMAIL DATA
- *    - Disclose: Confirmation numbers, booking references, relevant dates/times
- *    - Redact: Full email content, sender details (unless relevant), unrelated correspondence
- *    - Exception: When user explicitly asked to share specific email content
- *
- * 3. PERSONAL PREFERENCES
- *    - Disclose: Preferences directly relevant to the current decision (dietary, budget range)
- *    - Redact: Preferences not relevant to current goal
- *
- * 4. FINANCIAL DETAILS
- *    - Disclose: Budget ranges, price preferences ("under $200")
- *    - Redact: Exact account balances, specific transaction history
- *
- * 5. LOCATION/SCHEDULE
- *    - Disclose: General availability, travel constraints
- *    - Redact: Specific addresses (unless pickup/dropoff needed), detailed daily schedules
+ * The goal is privacy protection while preserving message usefulness.
  */
 
 function buildFilterPrompt(
   rawMessage: string,
   context: PrivacyFilterContext
 ): string {
-  return `You are a privacy filter for a collaborative planning assistant. Your job is to review a message before it's shared in a group chat and redact unnecessary sensitive details.
+  return `You are a privacy filter for a collaborative assistant. Review this message before it's shared in a group chat and apply the minimum necessary disclosure principle.
 
-## Conversation Context
-- **Goal**: ${context.conversationGoal || "General planning/coordination"}
+## Context
+- **Current Goal**: ${context.conversationGoal || "General coordination"}
 - **Stage**: ${context.currentStage}
-- **Message Author**: ${context.ownerName}'s Assistant
-- **Recipients**: ${context.recipientNames.join(", ")}
+- **Author**: ${context.ownerName}'s Assistant
+- **Audience**: ${context.recipientNames.join(", ")}
 
-## Privacy Rules - Apply These Strictly
+## Core Principle: Goal-Oriented Disclosure
 
-### Calendar Information
-- ✅ KEEP: "I'm free on Saturday afternoon" or "${context.ownerName} has a conflict 2-4pm"
-- ❌ REDACT: "Meeting with Dr. Smith" → "has an appointment"
-- ❌ REDACT: "Interview at Google" → "has a commitment"
-- ❌ REDACT: "Therapy session" → "has an appointment"
-The goal is scheduling, so availability matters, not what the events are.
+For each piece of information in the message, ask:
+1. **Is this necessary to achieve the current goal?**
+2. **Would a more abstract version serve the same purpose?**
+3. **Does the audience need this specific detail, or just the implication?**
 
-### Email Information
-- ✅ KEEP: Confirmation numbers, booking references, dates, prices for planned items
-- ❌ REDACT: Full email quotes (summarize instead)
-- ❌ REDACT: Unrelated correspondence mentioned
-- ✅ KEEP: Relevant booking details being discussed
+The goal is to preserve the message's usefulness while removing details that don't contribute to the shared objective.
 
-### Meeting/Event Details
-When calendar shows existing events:
-- ✅ KEEP: Time blocks, duration, "has a conflict"
-- ❌ REDACT: Event titles, attendee names, event descriptions
-- Exception: If the event IS the topic being planned
+## Decision Framework
 
-### Financial Details
-- ✅ KEEP: Budget preferences ("prefers budget options", "under $200/night")
-- ❌ REDACT: Exact amounts from unrelated transactions
-- ✅ KEEP: Prices of options being discussed
+**KEEP information when:**
+- It directly enables progress on the current goal
+- Removing it would make the message unhelpful or confusing
+- The user explicitly chose to share it
+- It's about options/plans being actively discussed
 
-### Personal Information
-- ✅ KEEP: Preferences relevant to current decision (dietary restrictions for restaurant planning)
-- ❌ REDACT: Preferences not relevant to current topic
+**ABSTRACT information when:**
+- The specific detail isn't needed, but the implication is
+- Example: "has a conflict" instead of the nature of the conflict
+- Example: "found a reservation" instead of quoting full email content
 
-## Task
+**REMOVE information when:**
+- It's unrelated to the current goal
+- It reveals details about third parties not in the conversation
+- It exposes private matters that aren't relevant to the decision at hand
 
-Review this message and return a filtered version. Only modify parts that violate the privacy rules above. Keep the message natural and helpful - don't over-redact.
+## Category Guidelines
 
-If the message is already appropriate, return it unchanged.
+Apply the decision framework to these common categories:
 
-## Original Message
+**Time & Availability**: Share when someone is free/busy. Abstract the reason unless it's the topic being planned.
+
+**Communications (email, messages)**: Share relevant confirmations, references, dates. Summarize rather than quote. Omit unrelated correspondence.
+
+**Financial**: Share stated preferences and ranges. Share prices of discussed options. Abstract transaction details unless directly relevant.
+
+**Locations**: Share what's needed for coordination. Abstract specific addresses unless pickup/meeting point is being planned.
+
+**Personal details**: Share preferences that affect the current decision. Omit details about health, work, relationships unless the user raised them as relevant.
+
+## Important: Avoid Over-Filtering
+
+- Don't redact so aggressively that the message becomes unhelpful
+- If unsure whether something is relevant, lean toward keeping it
+- Preserve the natural flow and helpfulness of the message
+- The goal is privacy protection, not information minimization
+
+## Message to Review
 ${rawMessage}
 
-## Response Format
-Return ONLY the filtered message, nothing else. No explanations, no prefixes.`;
+## Response
+Return ONLY the filtered message. No explanations, prefixes, or commentary. If no changes needed, return the message exactly as-is.`;
 }
 
 /**
@@ -124,17 +124,16 @@ export async function filterMessageForPrivacy(
     return { filteredMessage: rawMessage, wasModified: false };
   }
 
-  // Skip if message doesn't seem to contain potentially sensitive info
-  const sensitivePatterns = [
-    /calendar|schedule|appointment|meeting|event/i,
-    /email|gmail|inbox|message from/i,
-    /\$\d+|budget|cost|price|paid/i,
-    /address|location|where.*live/i,
-    /doctor|therapy|medical|health/i,
-    /interview|job|work.*meeting/i,
+  // Skip if message doesn't reference data sources that might contain private info
+  // These patterns detect when the assistant accessed private data, not specific content
+  const dataAccessPatterns = [
+    /calendar|schedule|checked.*availability|looked.*at.*events/i,
+    /email|gmail|inbox|searched.*messages|found.*in.*mail/i,
+    /\bprofile\b|preferences|based on.*history/i,
+    /your.*account|your.*records/i,
   ];
 
-  const mightContainSensitiveInfo = sensitivePatterns.some(pattern =>
+  const mightContainSensitiveInfo = dataAccessPatterns.some(pattern =>
     pattern.test(rawMessage)
   );
 
@@ -189,17 +188,20 @@ export function messageNeedsPrivacyReview(message: string): boolean {
   // Very short messages are usually safe
   if (message.length < 50) return false;
 
-  // Check for sensitive topic indicators
-  const sensitiveIndicators = [
-    "checked your calendar",
-    "found in your email",
-    "your schedule shows",
-    "you have a meeting",
-    "searched your gmail",
-    "appointment at",
-    "event on",
+  // Check for indicators that private data sources were accessed
+  // Focus on data access patterns, not specific content types
+  const dataAccessIndicators = [
+    "checked your",
+    "found in your",
+    "your calendar",
+    "your email",
+    "your schedule",
+    "searched your",
+    "looked at your",
+    "based on your",
+    "according to your",
   ];
 
   const lowerMessage = message.toLowerCase();
-  return sensitiveIndicators.some(indicator => lowerMessage.includes(indicator));
+  return dataAccessIndicators.some(indicator => lowerMessage.includes(indicator));
 }
