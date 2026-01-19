@@ -102,9 +102,12 @@ export async function GET(
     let canonicalState;
     try {
       canonicalState = JSON.parse(group.canonicalState);
-      // Ensure pendingDecisions exists for existing conversations
+      // Ensure arrays exist for existing conversations
       if (canonicalState && !canonicalState.pendingDecisions) {
         canonicalState.pendingDecisions = [];
+      }
+      if (canonicalState && !canonicalState.completedNextSteps) {
+        canonicalState.completedNextSteps = [];
       }
     } catch {
       canonicalState = null;

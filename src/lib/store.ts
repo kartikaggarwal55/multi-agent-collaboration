@@ -137,6 +137,7 @@ function createInitialCanonicalState(): CanonicalState {
     openQuestions: [],
     pendingDecisions: [],
     suggestedNextSteps: [],
+    completedNextSteps: [],
     stage: "negotiating",
     lastUpdatedAt: new Date().toISOString(),
     lastUpdatedBy: "system",

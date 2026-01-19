@@ -153,9 +153,12 @@ export async function POST(
     let canonicalState: CanonicalState;
     try {
       canonicalState = JSON.parse(group.canonicalState);
-      // Ensure pendingDecisions exists for existing conversations
+      // Ensure arrays exist for existing conversations
       if (!canonicalState.pendingDecisions) {
         canonicalState.pendingDecisions = [];
+      }
+      if (!canonicalState.completedNextSteps) {
+        canonicalState.completedNextSteps = [];
       }
     } catch {
       canonicalState = {
@@ -166,6 +169,7 @@ export async function POST(
         openQuestions: [],
         pendingDecisions: [],
         suggestedNextSteps: [],
+        completedNextSteps: [],
         stage: "negotiating",
         lastUpdatedAt: new Date().toISOString(),
         lastUpdatedBy: "system",

@@ -79,6 +79,7 @@ export interface CanonicalState {
   openQuestions: OpenQuestion[];
   pendingDecisions: PendingDecision[];
   suggestedNextSteps: string[];
+  completedNextSteps: string[]; // Steps that have been completed (detected by LLM)
   stage: "negotiating" | "searching" | "waiting_for_user" | "converged";
   lastUpdatedAt: string;
   lastUpdatedBy: string;

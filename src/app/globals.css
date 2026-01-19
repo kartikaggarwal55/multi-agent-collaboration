@@ -233,6 +233,15 @@
   background: oklch(0.40 0.02 250);
 }
 
+/* Hidden scrollbar utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
 /* Noise texture */
 .noise-overlay {
   position: relative;

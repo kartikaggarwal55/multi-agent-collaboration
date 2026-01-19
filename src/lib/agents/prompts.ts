@@ -50,7 +50,7 @@ export const EMIT_TURN_TOOL = {
         properties: {
           leading_option: {
             type: "string",
-            description: "Current best option/plan if one has emerged",
+            description: "Capture the current leading direction based on what's actually been discussed. Include concrete options being actively considered, but don't assume agreement - reflect the true state. Examples: 'Exploring Thai restaurants for Friday', 'Bob proposed hiking Jan 25, awaiting Alice's input', 'Comparing flights Feb 10-12'. Update whenever the conversation moves toward a direction.",
           },
           status_summary: {
             type: "array",
@@ -65,12 +65,16 @@ export const EMIT_TURN_TOOL = {
                 participantId: {
                   type: "string",
                   enum: ["alice", "bob"],
+                  description: "Who this constraint relates to, if applicable",
                 },
-                constraint: { type: "string" },
+                constraint: {
+                  type: "string",
+                  description: "The constraint, written naturally",
+                },
               },
               required: ["participantId", "constraint"],
             },
-            description: "New constraints surfaced this turn",
+            description: "New constraints or requirements surfaced this turn",
           },
           add_questions: {
             type: "array",
@@ -217,7 +221,7 @@ You MUST call the \`emit_turn\` tool at the end of your response with:
 - questions_for_user: Array of questions if next_action is WAIT_FOR_USER
 - state_patch: Updates to the room state:
   - status_summary: REPLACE with 2-4 concise bullet points summarizing current state (not additive - consolidate!)
-  - leading_option: Current best option/plan
+  - leading_option: Keep this current! Reflect what's actually being discussed - options on the table, proposals made, directions being explored. Don't assume agreement, but do capture momentum.
   - resolve_question_ids: IDs of questions that have been answered (very important!)
   - add_constraints: Only NEW constraints not already captured
 - confidence: 0-1 score for whether you can proceed without user input

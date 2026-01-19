@@ -10,6 +10,7 @@ import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./m
 import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
 import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion, AssistantStatus, AssistantStatusType } from "../types";
 import { filterMessageForPrivacy } from "./privacy-filter";
+import { detectCompletedSteps } from "./step-completion-detector";
 
 const anthropic = new Anthropic();
 const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
@@ -119,10 +120,11 @@ Otherwise, if waiting on human input → WAIT_FOR_USER`,
               items: {
                 type: "object",
                 properties: {
-                  participantId: { type: "string" },
-                  constraint: { type: "string" },
+                  participantId: { type: "string", description: "Who this constraint relates to, if applicable" },
+                  constraint: { type: "string", description: "The constraint, written naturally" },
                 },
               },
+              description: "New constraints or requirements surfaced this turn",
             },
             pending_decisions: {
               type: "array",
@@ -206,7 +208,7 @@ function generateSystemPrompt(
 
   const tools = [
     "Web search - Find flights, hotels, restaurants, activities. Always include clickable links to booking sites, Google Flights, etc.",
-    hasCalendar ? `Calendar - Check ${ownerName}'s availability and schedule events. Always include [View in Calendar](url) links for events` : null,
+    hasCalendar ? `Calendar - Check ${ownerName}'s availability. Two tools available: calendar_free_busy (returns busy/free time blocks only) and calendar_list_events (returns full event details including titles). Choose based on what the conversation actually needs.` : null,
     hasGmail ? `Gmail - Search ${ownerName}'s emails for confirmations, reservations, receipts. Always include [Open in Gmail](url) links` : null,
     hasMaps ? "Maps - Search for places, restaurants, venues. Always include [View on Google Maps](url) links" : null,
   ].filter(Boolean).join("\n- ");
@@ -300,6 +302,19 @@ When using tools to find information:
 For Gmail searches:
 - Use Gmail query syntax: "from:airline subject:confirmation newer_than:1y"
 - Try variations: different keywords, date ranges, sender names
+
+## Privacy in Group Context
+When sharing ${ownerName}'s private data, apply minimum necessary disclosure - share what serves the goal.
+
+Consider:
+- **Who's in the conversation** - what level of detail is appropriate for this audience?
+- **What's the goal** - "${canonicalState.goal || "Not yet defined"}" - does the detail serve this goal?
+- **Abstraction test** - would a summary work as well as the full detail?
+
+Examples of contextual judgment:
+- Calendar: If coordinating schedules, time blocks often suffice. If discussing a shared event, details matter.
+- Email: Share relevant confirmations/dates. Quote only when the exact wording matters.
+- Personal data: Share what's relevant to the decision at hand.
 
 ## Be Proactive
 When the conversation needs information (flights, hotels, places, availability):
@@ -588,7 +603,27 @@ export async function* orchestrateGroupRun(
 
       // Apply state patch
       if (result.statePatch) {
+        // Capture previous steps before applying patch
+        const previousSteps = [...(currentState.suggestedNextSteps || [])];
+
         currentState = applyStatePatch(currentState, result.statePatch, assistant.id);
+
+        // Detect completed steps if next steps changed
+        if (result.statePatch.suggested_next_steps && result.content) {
+          const { completedSteps } = await detectCompletedSteps(
+            previousSteps,
+            currentState.suggestedNextSteps || [],
+            result.content
+          );
+
+          if (completedSteps.length > 0) {
+            currentState.completedNextSteps = [
+              ...(currentState.completedNextSteps || []),
+              ...completedSteps,
+            ];
+          }
+        }
+
         await prisma.group.update({
           where: { id: groupId },
           data: { canonicalState: JSON.stringify(currentState), lastActiveAt: new Date() },

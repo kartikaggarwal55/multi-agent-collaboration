@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CanonicalState } from "../types";
 
 const anthropic = new Anthropic();
-const FILTER_MODEL = "claude-3-5-haiku";
+const FILTER_MODEL = "claude-haiku-4-5";
 
 interface PrivacyFilterContext {
   conversationGoal: string;
@@ -65,30 +65,39 @@ The goal is to preserve the message's usefulness while removing details that don
 - Removing it would make the message unhelpful or confusing
 - The user explicitly chose to share it
 - It's about options/plans being actively discussed
+- The audience and goal context warrant the level of detail
 
 **ABSTRACT information when:**
-- The specific detail isn't needed, but the implication is
-- Example: "has a conflict" instead of the nature of the conflict
-- Example: "found a reservation" instead of quoting full email content
+- The implication matters but the specific detail doesn't
+- Example: "has a conflict" vs. the nature of the conflict (when scheduling)
+- Example: "found a reservation" vs. quoting full email content
+- The detail involves third parties not in the conversation
 
 **REMOVE information when:**
-- It's unrelated to the current goal
-- It reveals details about third parties not in the conversation
-- It exposes private matters that aren't relevant to the decision at hand
+- It's clearly unrelated to the current goal
+- It exposes private matters with no bearing on the decision at hand
+- Including it would be surprising or uncomfortable for the owner
+
+**Context matters**: The same detail might be appropriate in one context and not another. A medical appointment might be relevant when family is coordinating care, but just "has an appointment" when colleagues are scheduling a meeting.
 
 ## Category Guidelines
 
-Apply the decision framework to these common categories:
+For each category, consider: Does the specific detail serve the goal, or would an abstraction work just as well?
 
-**Time & Availability**: Share when someone is free/busy. Abstract the reason unless it's the topic being planned.
+**Time & Availability**:
+- The key question: Does the audience need to know WHY someone is busy, or just WHEN?
+- If coordinating schedules: Usually just the time blocks matter ("busy 2-4pm")
+- If the event IS the topic (e.g., discussing a shared meeting): Details are relevant
+- Third-party names in calendar events should generally be abstracted unless directly relevant
+- Example: For schedule coordination, "has a conflict" usually suffices over "meeting with Dr. Smith"
 
 **Communications (email, messages)**: Share relevant confirmations, references, dates. Summarize rather than quote. Omit unrelated correspondence.
 
 **Financial**: Share stated preferences and ranges. Share prices of discussed options. Abstract transaction details unless directly relevant.
 
-**Locations**: Share what's needed for coordination. Abstract specific addresses unless pickup/meeting point is being planned.
+**Locations**: Share what's needed for coordination. Abstract specific addresses unless the location itself is being planned/discussed.
 
-**Personal details**: Share preferences that affect the current decision. Omit details about health, work, relationships unless the user raised them as relevant.
+**Personal details**: Share preferences that affect the current decision. Consider whether health, work, or relationship details are necessary for the goal or just incidental.
 
 ## Important: Avoid Over-Filtering
 
@@ -167,6 +176,23 @@ export async function filterMessageForPrivacy(
 
     // Check if message was actually modified
     const wasModified = filteredMessage !== rawMessage;
+
+    // Detailed logging for debugging
+    if (wasModified) {
+      console.log("\n╔══════════════════════════════════════════════════════════════");
+      console.log("║ [PrivacyFilter] MESSAGE MODIFIED");
+      console.log("╠══════════════════════════════════════════════════════════════");
+      console.log("║ BEFORE:");
+      console.log("╟──────────────────────────────────────────────────────────────");
+      rawMessage.split("\n").forEach(line => console.log(`║ ${line}`));
+      console.log("╠══════════════════════════════════════════════════════════════");
+      console.log("║ AFTER:");
+      console.log("╟──────────────────────────────────────────────────────────────");
+      filteredMessage.split("\n").forEach(line => console.log(`║ ${line}`));
+      console.log("╚══════════════════════════════════════════════════════════════\n");
+    } else {
+      console.log("[PrivacyFilter] No changes needed - message passed through");
+    }
 
     return {
       filteredMessage,

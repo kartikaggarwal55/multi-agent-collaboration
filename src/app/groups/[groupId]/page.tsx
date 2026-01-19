@@ -97,6 +97,13 @@ const CalendarIcon = () => (
   </svg>
 );
 
+const MailIconSmall = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
+);
+
 const TrashIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <polyline points="3 6 5 6 21 6" />
@@ -148,6 +155,7 @@ interface Participant {
   image?: string;
   ownerHumanId?: string;
   hasCalendar?: boolean;
+  hasGmail?: boolean;
 }
 
 // Parse and style @mentions in message content
@@ -469,8 +477,12 @@ export default function GroupPage({
     setError(null);
     setMessage("");
 
+    // Find the current user's assistant to show as initially typing
     const assistants = group?.participants.filter((p) => p.kind === "assistant") || [];
-    if (assistants.length > 0) {
+    const myAssistant = assistants.find((a) => a.ownerHumanId === session?.user?.id);
+    if (myAssistant) {
+      setCurrentlyTyping(myAssistant.displayName);
+    } else if (assistants.length > 0) {
       setCurrentlyTyping(assistants[0].displayName);
     }
 
@@ -922,7 +934,7 @@ export default function GroupPage({
       <div className="w-[340px] shrink-0 border-l border-border/30 glass-panel relative overflow-hidden">
         <div className="h-full flex flex-col">
           <div className="px-5 py-4 border-b border-border/30">
-            <h2 className="text-sm font-semibold tracking-tight">Session State</h2>
+            <h2 className="text-[16px] font-semibold tracking-tight text-foreground">Session State</h2>
           </div>
           <ScrollArea className="flex-1 min-h-0">
             <div className="px-5 py-4">
@@ -964,6 +976,97 @@ export default function GroupPage({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Section header component for consistency
+const SectionHeader = ({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) => (
+  <div className="flex items-center gap-3 mb-4">
+    <span className={`text-[13px] font-semibold uppercase tracking-[0.08em] ${accent ? 'text-primary' : 'text-foreground/50'}`}>
+      {children}
+    </span>
+    <div className={`flex-1 h-[1px] ${accent ? 'bg-primary/30' : 'bg-border/40'}`} />
+  </div>
+);
+
+// Next Steps Section - dynamic height showing only open steps, scroll up for completed
+function NextStepsSection({
+  completedSteps,
+  openSteps,
+}: {
+  completedSteps: string[];
+  openSteps: string[];
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const openStepsRef = useRef<HTMLDivElement>(null);
+  const [openStepsHeight, setOpenStepsHeight] = useState<number | null>(null);
+
+  // Measure open steps height and scroll to bottom
+  useEffect(() => {
+    if (openStepsRef.current) {
+      const height = openStepsRef.current.offsetHeight;
+      // Cap at 200px to prevent very long lists
+      setOpenStepsHeight(Math.min(height, 200));
+    }
+
+    // Scroll to bottom (show open steps)
+    if (scrollRef.current) {
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+      }, 50);
+    }
+  }, [completedSteps.length, openSteps.length, openSteps]);
+
+  const totalCompleted = completedSteps.length;
+  const hasCompleted = completedSteps.length > 0;
+
+  return (
+    <div>
+      <SectionHeader accent>Next Steps</SectionHeader>
+      <div
+        ref={scrollRef}
+        className="overflow-y-auto scrollbar-hide"
+        style={{
+          maxHeight: openStepsHeight ? `${openStepsHeight}px` : '200px',
+          scrollBehavior: "smooth"
+        }}
+      >
+        <div className="space-y-1.5">
+          {/* Completed steps - hidden above, scroll up to reveal */}
+          {completedSteps.map((step, i) => (
+            <div
+              key={`completed-${i}`}
+              className="flex items-start gap-2 text-[15px] leading-[1.5]"
+            >
+              <span className="text-foreground/30 text-[14px] w-4 text-right shrink-0 tabular-nums">
+                {i + 1}.
+              </span>
+              <span className="text-foreground/40 line-through">{step}</span>
+            </div>
+          ))}
+          {/* Subtle divider if there are completed steps */}
+          {hasCompleted && openSteps.length > 0 && (
+            <div className="h-px bg-border/20 my-1" />
+          )}
+          {/* Open steps - always visible */}
+          <div ref={openStepsRef}>
+            {openSteps.map((step, i) => (
+              <div
+                key={`open-${i}`}
+                className="flex items-start gap-2 text-[15px] leading-[1.5] py-0.5"
+              >
+                <span className="text-foreground/50 text-[14px] w-4 text-right shrink-0 tabular-nums">
+                  {totalCompleted + i + 1}.
+                </span>
+                <span className="text-foreground/90">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1035,6 +1138,7 @@ function StatePanel({
   getInitials: (name: string) => string;
 }) {
   const [constraintsExpanded, setConstraintsExpanded] = useState(false);
+  const [participantsExpanded, setParticipantsExpanded] = useState(true);
 
   if (!canonicalState) {
     return (
@@ -1047,41 +1151,25 @@ function StatePanel({
 
   const sessionConstraints = canonicalState.constraints?.filter((c) => c.source === "session_statement") || [];
 
-  // Section header component for consistency
-  const SectionHeader = ({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) => (
-    <div className="flex items-center gap-3 mb-4">
-      <span className={`text-[12px] font-semibold uppercase tracking-[0.12em] ${accent ? 'text-primary' : 'text-foreground/40'}`}>
-        {children}
-      </span>
-      <div className={`flex-1 h-[1px] ${accent ? 'bg-primary/30' : 'bg-border/40'}`} />
-    </div>
-  );
-
   return (
-    <div className="space-y-7">
-      {/* Current Plan - Hero Section */}
+    <div className="space-y-6">
+      {/* Current Plan */}
       {canonicalState.leadingOption && (
-        <div className="pb-1">
+        <div>
           <SectionHeader accent>Current Plan</SectionHeader>
-          <p className="text-[15px] leading-[1.7] text-foreground font-medium">
+          <p className="text-[15px] leading-[1.6] text-foreground font-medium">
             {canonicalState.leadingOption}
           </p>
         </div>
       )}
 
       {/* Next Steps */}
-      {canonicalState.suggestedNextSteps && canonicalState.suggestedNextSteps.length > 0 && (
-        <div>
-          <SectionHeader accent>Next Steps</SectionHeader>
-          <div className="space-y-3">
-            {canonicalState.suggestedNextSteps.map((step, i) => (
-              <div key={`step-${i}`} className="flex items-start gap-3 text-[14px] leading-[1.6]">
-                <span className="w-6 h-6 rounded-lg bg-primary/15 text-primary font-semibold text-[12px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-                <span className="text-foreground/85">{step}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {((canonicalState.suggestedNextSteps && canonicalState.suggestedNextSteps.length > 0) ||
+        (canonicalState.completedNextSteps && canonicalState.completedNextSteps.length > 0)) && (
+        <NextStepsSection
+          completedSteps={canonicalState.completedNextSteps || []}
+          openSteps={canonicalState.suggestedNextSteps || []}
+        />
       )}
 
       {/* Constraints - Collapsible */}
@@ -1089,63 +1177,75 @@ function StatePanel({
         <div>
           <button
             onClick={() => setConstraintsExpanded(!constraintsExpanded)}
-            className="w-full flex items-center gap-3 text-left group"
+            className="w-full flex items-center gap-2 text-left group"
           >
-            <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-foreground/40 group-hover:text-foreground/60 transition-colors">
+            <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-foreground/50 group-hover:text-foreground/70 transition-colors leading-none">
               Constraints ({sessionConstraints.length})
             </span>
             <div className="flex-1 h-[1px] bg-border/40" />
-            <span className="text-foreground/30 group-hover:text-foreground/50 transition-colors">
+            <span className="text-foreground/40 group-hover:text-foreground/60 transition-colors flex items-center">
               <ChevronIcon expanded={constraintsExpanded} />
             </span>
           </button>
           {constraintsExpanded && (
-            <ul className="space-y-2.5 list-none mt-4">
+            <div className="space-y-1 mt-2.5">
               {sessionConstraints.map((c, i) => {
-                // Strip any leading dash/bullet from constraint text
                 const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
                 return (
-                  <li key={i} className="flex items-start gap-3 text-[14px] text-foreground/55 leading-[1.6]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-foreground/25 mt-[9px] shrink-0" />
-                    <span className="flex-1">{constraintText}</span>
-                  </li>
+                  <div key={i} className="flex items-start gap-2 text-[15px] text-foreground/60 leading-[1.35] py-0.5">
+                    <span className="w-2 flex justify-center shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-foreground/40 mt-[7px]" />
+                    </span>
+                    <span>{constraintText}</span>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
         </div>
       )}
 
-      {/* Participants */}
+      {/* Participants - Collapsible */}
       <div>
-        <SectionHeader>Participants</SectionHeader>
-        <div className="grid grid-cols-1 gap-2.5">
-          {participants.map((p) => {
-            const isAI = p.kind === "assistant";
-            return (
-              <div
-                key={p.id}
-                className="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-foreground/5 transition-colors -mx-3"
-              >
-                <Avatar className={`h-7 w-7 border ${isAI ? 'border-primary/30' : 'border-border/50'}`}>
-                  {p.image ? <AvatarImage src={p.image} /> : null}
-                  <AvatarFallback className={`text-[11px] font-semibold ${isAI ? 'bg-primary/10 text-primary' : 'bg-foreground/10 text-foreground/70'}`}>
-                    {getInitials(p.displayName)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <span className="text-[14px] text-foreground/85 truncate block">{p.displayName}</span>
+        <button
+          onClick={() => setParticipantsExpanded(!participantsExpanded)}
+          className="w-full flex items-center gap-2 text-left group"
+        >
+          <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-foreground/50 group-hover:text-foreground/70 transition-colors leading-none">
+            Participants ({participants.length})
+          </span>
+          <div className="flex-1 h-[1px] bg-border/40" />
+          <span className="text-foreground/40 group-hover:text-foreground/60 transition-colors flex items-center">
+            <ChevronIcon expanded={participantsExpanded} />
+          </span>
+        </button>
+        {participantsExpanded && (
+          <div className="space-y-1 mt-2.5">
+            {participants.map((p) => {
+              const isAI = p.kind === "assistant";
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-2.5 py-1.5 rounded-lg hover:bg-foreground/5 transition-colors"
+                >
+                  <Avatar className={`h-6 w-6 border ${isAI ? 'border-primary/30' : 'border-border/50'}`}>
+                    {p.image ? <AvatarImage src={p.image} /> : null}
+                    <AvatarFallback className={`text-[10px] font-semibold ${isAI ? 'bg-primary/10 text-primary' : 'bg-foreground/10 text-foreground/70'}`}>
+                      {getInitials(p.displayName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="text-[15px] text-foreground/90 truncate flex-1">{p.displayName}</span>
+                  {isAI && p.hasCalendar && (
+                    <span className="text-foreground/40"><CalendarIcon /></span>
+                  )}
+                  {isAI && p.hasGmail && (
+                    <span className="text-foreground/40"><MailIconSmall /></span>
+                  )}
                 </div>
-                {isAI && (
-                  <span className="text-[10px] font-semibold text-primary/70 uppercase tracking-wider bg-primary/10 px-1.5 py-0.5 rounded">AI</span>
-                )}
-                {p.hasCalendar && (
-                  <CalendarIcon />
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
