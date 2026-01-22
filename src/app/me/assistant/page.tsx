@@ -1,7 +1,7 @@
 "use client";
 
 // CHANGED: Private 1:1 assistant chat page with redesigned UI
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { redirect } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChatNav } from "@/components/chat-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useVoiceSession } from "@/hooks/useVoiceSession";
 
 // Icons
 const SendIcon = () => (
@@ -65,6 +66,46 @@ const TrashIcon = () => (
   </svg>
 );
 
+const MicIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+    <line x1="12" x2="12" y1="19" y2="22" />
+  </svg>
+);
+
+const MicOffIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="2" x2="22" y1="2" y2="22" />
+    <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
+    <path d="M5 10v2a7 7 0 0 0 12 5" />
+    <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+    <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+    <line x1="12" x2="12" y1="19" y2="22" />
+  </svg>
+);
+
+const EditIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    <path d="m15 5 4 4" />
+  </svg>
+);
+
+const XIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+);
+
+const BrainIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24A2.5 2.5 0 0 1 9.5 2" />
+    <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24A2.5 2.5 0 0 0 14.5 2" />
+  </svg>
+);
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -90,10 +131,23 @@ export default function PrivateAssistantPage() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isProcessingVoice, setIsProcessingVoice] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScroll = useRef(true);
   const isInitialLoad = useRef(true);
+
+  // Voice session hook
+  const {
+    error: voiceError,
+    startSession: startVoiceSession,
+    endSession: endVoiceSession,
+    isActive: isVoiceActive,
+    isConnecting: isVoiceConnecting,
+  } = useVoiceSession();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -275,6 +329,102 @@ export default function PrivateAssistantPage() {
     }
   };
 
+  // Handle starting to edit a preference
+  const startEditing = (index: number, currentValue: string) => {
+    setEditingIndex(index);
+    setEditValue(currentValue);
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.focus();
+        editInputRef.current.style.height = "auto";
+        editInputRef.current.style.height = editInputRef.current.scrollHeight + "px";
+      }
+    }, 0);
+  };
+
+  // Handle saving an edited preference
+  const saveEdit = async () => {
+    if (editingIndex === null || !editValue.trim()) return;
+
+    try {
+      const response = await fetch("/api/me/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index: editingIndex, value: editValue.trim() }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update preference");
+
+      const data = await response.json();
+      setProfile(data.profile);
+      setEditingIndex(null);
+      setEditValue("");
+    } catch (err) {
+      console.error("Error updating preference:", err);
+      setError("Failed to update preference");
+    }
+  };
+
+  // Handle deleting a preference
+  const deletePreference = async (index: number) => {
+    try {
+      const response = await fetch("/api/me/profile", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ index }),
+      });
+
+      if (!response.ok) throw new Error("Failed to delete preference");
+
+      const data = await response.json();
+      setProfile(data.profile);
+    } catch (err) {
+      console.error("Error deleting preference:", err);
+      setError("Failed to delete preference");
+    }
+  };
+
+  // Handle voice session toggle
+  const handleVoiceToggle = useCallback(async () => {
+    if (isVoiceActive || isVoiceConnecting) {
+      // End session and process transcript
+      setIsProcessingVoice(true);
+      try {
+        const finalTranscript = await endVoiceSession();
+
+        if (finalTranscript.length > 0) {
+          // Process transcript for profile updates and storage
+          const response = await fetch("/api/me/voice/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ transcript: finalTranscript }),
+          });
+
+          // Always refresh to show stored conversation
+          fetchChatData();
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.changes && data.changes.length > 0) {
+              setRecentChanges((prev) => [...prev, ...data.changes.map((c: { type: string; reason: string }) => ({
+                type: c.type,
+                reason: c.reason,
+                timestamp: new Date().toISOString(),
+              }))].slice(-5));
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error processing voice session:", err);
+      } finally {
+        setIsProcessingVoice(false);
+      }
+    } else {
+      // Start new session
+      await startVoiceSession();
+    }
+  }, [isVoiceActive, isVoiceConnecting, endVoiceSession, startVoiceSession, fetchChatData]);
+
   const reconnectGoogle = () => {
     // Sign out and redirect to sign-in page which will trigger fresh OAuth consent
     signOut({ callbackUrl: "/auth/signin?prompt=consent" });
@@ -364,8 +514,8 @@ export default function PrivateAssistantPage() {
             {isLoading && (
               <div className="flex items-center gap-3 animate-message-enter">
                 <Avatar className="h-8 w-8 border-2 border-primary/30">
-                  <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/20 text-primary text-xs">
-                    AI
+                  <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/20 text-primary">
+                    <BrainIcon />
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-card border border-border/50">
@@ -394,22 +544,56 @@ export default function PrivateAssistantPage() {
           </div>
         )}
 
+        {/* Voice error */}
+        {voiceError && (
+          <div className="px-6 py-2">
+            <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg border border-destructive/20 flex items-center gap-2">
+              <MicOffIcon />
+              <span>Voice error: {voiceError}</span>
+            </div>
+          </div>
+        )}
+
         {/* Input - FULL WIDTH */}
         <div className="px-6 py-4 border-t border-border/50 bg-background/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <div className="flex-1 relative input-glow rounded-lg">
               <Input
-                placeholder="Type a message..."
+                placeholder={isVoiceActive ? "Voice session active..." : "Type a message..."}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={isLoading}
+                disabled={isLoading || isVoiceActive}
                 className="h-10 bg-card/50 border-border/50 rounded-lg text-sm focus:ring-0 focus:border-primary/50"
               />
             </div>
             <Button
+              onClick={handleVoiceToggle}
+              disabled={isLoading || isProcessingVoice}
+              className={`h-10 w-10 p-0 rounded-lg transition-all ${
+                isVoiceActive || isVoiceConnecting
+                  ? "bg-emerald-500 hover:bg-emerald-600 text-white"
+                  : "bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+              }`}
+              title={isVoiceActive ? "End voice session" : "Start voice session"}
+            >
+              {isVoiceActive ? (
+                <div className="flex items-center justify-center gap-0.5">
+                  <span className="w-0.5 h-3 bg-white rounded-full animate-[voice-bar_0.5s_ease-in-out_infinite]" />
+                  <span className="w-0.5 h-4 bg-white rounded-full animate-[voice-bar_0.5s_ease-in-out_infinite_0.15s]" />
+                  <span className="w-0.5 h-2 bg-white rounded-full animate-[voice-bar_0.5s_ease-in-out_infinite_0.3s]" />
+                  <span className="w-0.5 h-4 bg-white rounded-full animate-[voice-bar_0.5s_ease-in-out_infinite_0.45s]" />
+                  <span className="w-0.5 h-3 bg-white rounded-full animate-[voice-bar_0.5s_ease-in-out_infinite_0.6s]" />
+                </div>
+              ) : isVoiceConnecting ? (
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <MicIcon />
+              )}
+            </Button>
+            <Button
               onClick={sendMessage}
-              disabled={isLoading || !input.trim()}
+              disabled={isLoading || !input.trim() || isVoiceActive}
               className="h-10 px-4 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-all disabled:opacity-40"
             >
               <SendIcon />
@@ -472,10 +656,53 @@ export default function PrivateAssistantPage() {
                     {profile.map((item, i) => (
                       <div
                         key={i}
-                        className="flex items-start gap-2.5 p-3 rounded-lg bg-secondary/50 border border-border/50 card-hover"
+                        className="group relative flex items-start gap-2 p-2.5 rounded-lg bg-secondary/50 border border-border/50 card-hover"
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary mt-2 shrink-0" />
-                        <span className="text-[14px] leading-relaxed text-foreground/90">{item}</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                        {editingIndex === i ? (
+                          <textarea
+                            ref={editInputRef}
+                            value={editValue}
+                            onChange={(e) => {
+                              setEditValue(e.target.value);
+                              e.target.style.height = "auto";
+                              e.target.style.height = e.target.scrollHeight + "px";
+                            }}
+                            onBlur={saveEdit}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                saveEdit();
+                              } else if (e.key === "Escape") {
+                                setEditingIndex(null);
+                                setEditValue("");
+                              }
+                            }}
+                            rows={1}
+                            className="flex-1 text-[13px] leading-relaxed text-foreground/90 bg-background border border-border rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary resize-none overflow-hidden"
+                            style={{ height: "auto" }}
+                          />
+                        ) : (
+                          <>
+                            <span className="flex-1 text-[13px] leading-relaxed text-foreground/90 pr-12">{item}</span>
+                            <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => startEditing(i, item)}
+                                className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                                title="Edit"
+                              >
+                                <EditIcon />
+                              </button>
+                              <button
+                                onClick={() => deletePreference(i)}
+                                className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
+                                title="Delete"
+                              >
+                                <XIcon />
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -535,6 +762,10 @@ function MessageBubble({
   animationDelay: number;
 }) {
   const isUser = message.role === "user";
+  // Detect voice messages (start with 🎤)
+  const isVoiceMessage = message.content.startsWith("🎤");
+  // Remove the 🎤 prefix for display
+  const displayContent = isVoiceMessage ? message.content.slice(2).trim() : message.content;
 
   return (
     <div
@@ -551,8 +782,8 @@ function MessageBubble({
               </AvatarFallback>
             </>
           ) : (
-            <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/20 text-primary text-xs font-medium">
-              AI
+            <AvatarFallback className="bg-gradient-to-br from-primary/30 to-primary/20 text-primary">
+              <BrainIcon />
             </AvatarFallback>
           )}
         </Avatar>
@@ -561,12 +792,18 @@ function MessageBubble({
           <div
             className={`rounded-xl px-4 py-3 ${
               isUser
-                ? "bg-[oklch(0.65_0.15_55)] text-white shadow-sm border border-[oklch(0.65_0.15_55)]"
+                ? isVoiceMessage
+                  ? "bg-[oklch(0.65_0.15_55/0.6)] text-white/90 shadow-sm border border-[oklch(0.65_0.15_55/0.4)]"
+                  : "bg-[oklch(0.65_0.15_55)] text-white shadow-sm border border-[oklch(0.65_0.15_55)]"
                 : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
             }`}
           >
             {isUser ? (
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              isVoiceMessage ? (
+                <p className="text-sm whitespace-pre-wrap leading-relaxed italic">"{displayContent}"</p>
+              ) : (
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+              )
             ) : (
               <div className="prose prose-sm prose-invert max-w-none prose-chat">
                 <ReactMarkdown

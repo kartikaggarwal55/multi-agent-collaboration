@@ -323,6 +323,16 @@
   animation: subtle-pulse 2s ease-in-out infinite;
 }
 
+/* Voice bar animation */
+@keyframes voice-bar {
+  0%, 100% {
+    height: 4px;
+  }
+  50% {
+    height: 16px;
+  }
+}
+
 /* Glow effect */
 .glow-ember {
   box-shadow:
@@ -337,8 +347,7 @@
 
 .card-hover:hover {
   transform: translateY(-1px);
-  box-shadow: 0 8px 30px oklch(0 0 0 / 0.25);
-  border-color: oklch(0.35 0.02 250);
+  box-shadow: 0 4px 12px oklch(0.5 0 0 / 0.08);
 }
 
 /* Input focus glow */

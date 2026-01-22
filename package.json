@@ -13,6 +13,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@auth/prisma-adapter": "^2.11.1",
+    "@google/genai": "^1.37.0",
     "@libsql/client": "^0.15.15",
     "@neondatabase/serverless": "^1.0.2",
     "@prisma/adapter-libsql": "^7.2.0",
