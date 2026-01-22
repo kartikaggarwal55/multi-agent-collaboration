@@ -247,8 +247,12 @@ export class GeminiLiveClient {
             console.error('GeminiLiveClient: WebSocket error', e);
             this.emit('error', new Error(e.message || 'WebSocket error'));
           },
-          onclose: () => {
-            console.log('GeminiLiveClient: WebSocket closed');
+          onclose: (e: CloseEvent) => {
+            console.log('GeminiLiveClient: WebSocket closed', {
+              code: e.code,
+              reason: e.reason,
+              wasClean: e.wasClean
+            });
             this.isConnected = false;
             this.emit('disconnected');
           }
