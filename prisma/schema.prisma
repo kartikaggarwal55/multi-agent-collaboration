@@ -151,5 +151,8 @@ model GroupMessage {
   // Optional: citations from web search
   citations  String? // JSON array of citation objects
 
+  // Optional: structured detail blocks for rich rendering
+  details    String? // JSON array of MessageBlock objects
+
   createdAt  DateTime @default(now())
 }

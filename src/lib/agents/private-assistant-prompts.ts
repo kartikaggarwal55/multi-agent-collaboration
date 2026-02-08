@@ -1,5 +1,6 @@
-// CHANGED: Prompts for private 1:1 assistant
+// Prompts for private 1:1 assistant
 import { formatProfileForPrompt } from "../profile";
+import { getCurrentDateTime } from "../api-utils";
 
 // Tool for emitting structured response with profile updates
 export const PRIVATE_EMIT_TURN_TOOL = {
@@ -54,42 +55,6 @@ IMPORTANT:
     required: ["message", "profile_updates"],
   },
 };
-
-// Default timezone - must match calendar.ts
-const DEFAULT_TIMEZONE = "America/Los_Angeles";
-
-// Get current date/time formatted for the prompt with context
-function getCurrentDateTime(): string {
-  const now = new Date();
-  const formatted = now.toLocaleString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-    timeZone: DEFAULT_TIMEZONE,
-  });
-
-  // Get date parts in the correct timezone
-  const year = parseInt(now.toLocaleString("en-US", { year: "numeric", timeZone: DEFAULT_TIMEZONE }));
-  const month = parseInt(now.toLocaleString("en-US", { month: "numeric", timeZone: DEFAULT_TIMEZONE })) - 1;
-  const day = now.toLocaleString("en-US", { day: "2-digit", timeZone: DEFAULT_TIMEZONE });
-  const monthStr = now.toLocaleString("en-US", { month: "2-digit", timeZone: DEFAULT_TIMEZONE });
-  const isoDate = `${year}-${monthStr}-${day}`;
-
-  // Determine the year for upcoming months
-  const nextYear = year + 1;
-  const upcomingMonthYear = month >= 10 ? nextYear : year; // Nov/Dec → next year for Jan/Feb
-
-  return `${formatted}
-ISO Date: ${isoDate}
-Timezone: ${DEFAULT_TIMEZONE}
-Current Year: ${year}
-
-IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${year} if that month has passed).`;
-}
 
 // System prompt for private assistant
 export function privateAssistantSystemPrompt(

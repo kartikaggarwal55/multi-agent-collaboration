@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getUserScopes } from "@/lib/api-utils";
 
 // GET /api/groups/[groupId] - Get group details and messages
 export async function GET(
@@ -61,19 +62,7 @@ export async function GET(
 
     // Check which members have calendar and gmail connected
     const memberUserIds = group.members.map((m) => m.userId);
-    const accounts = await prisma.account.findMany({
-      where: {
-        userId: { in: memberUserIds },
-        provider: "google",
-      },
-      select: { userId: true, scope: true },
-    });
-    const usersWithCalendar = new Set(
-      accounts.filter((a) => a.scope?.includes("calendar")).map((a) => a.userId)
-    );
-    const usersWithGmail = new Set(
-      accounts.filter((a) => a.scope?.includes("gmail")).map((a) => a.userId)
-    );
+    const { usersWithCalendar, usersWithGmail } = await getUserScopes(memberUserIds);
 
     // Build participants list (users + their assistants)
     const participants = [];
@@ -133,6 +122,7 @@ export async function GET(
       authorName: m.authorName,
       content: m.content,
       citations: m.citations ? JSON.parse(m.citations) : undefined,
+      details: m.details ? JSON.parse(m.details) : undefined,
     }));
 
     return NextResponse.json({

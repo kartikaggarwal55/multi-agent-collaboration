@@ -206,28 +206,3 @@ export async function filterMessageForPrivacy(
   }
 }
 
-/**
- * Quick check if a message likely needs privacy filtering
- * Used to skip the LLM call for obviously safe messages
- */
-export function messageNeedsPrivacyReview(message: string): boolean {
-  // Very short messages are usually safe
-  if (message.length < 50) return false;
-
-  // Check for indicators that private data sources were accessed
-  // Focus on data access patterns, not specific content types
-  const dataAccessIndicators = [
-    "checked your",
-    "found in your",
-    "your calendar",
-    "your email",
-    "your schedule",
-    "searched your",
-    "looked at your",
-    "based on your",
-    "according to your",
-  ];
-
-  const lowerMessage = message.toLowerCase();
-  return dataAccessIndicators.some(indicator => lowerMessage.includes(indicator));
-}

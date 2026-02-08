@@ -42,8 +42,9 @@ export async function POST(request: Request) {
     const entries: TranscriptEntry[] = transcript.map((item: string | TranscriptEntry) => {
       if (typeof item === 'string') {
         // Parse "[User]: text" or "[Assistant]: text" format
-        const userMatch = item.match(/^\[User\]:\s*(.*)$/i);
-        const assistantMatch = item.match(/^\[Assistant\]:\s*(.*)$/i);
+        // Use [\s\S]* instead of .* to match across newlines in multi-line messages
+        const userMatch = item.match(/^\[User\]:\s*([\s\S]*)$/i);
+        const assistantMatch = item.match(/^\[Assistant\]:\s*([\s\S]*)$/i);
         if (userMatch) {
           return { role: 'user' as const, text: userMatch[1] };
         } else if (assistantMatch) {

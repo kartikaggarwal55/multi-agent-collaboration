@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { createDefaultCanonicalState } from "@/lib/types";
 
 // GET /api/groups - List user's groups
 export async function GET() {
@@ -86,18 +87,7 @@ export async function POST(request: NextRequest) {
       data: {
         title: title || null,
         createdById: session.user.id,
-        canonicalState: JSON.stringify({
-          goal: "",
-          leadingOption: "",
-          statusSummary: [],
-          constraints: [],
-          openQuestions: [],
-          pendingDecisions: [],
-          suggestedNextSteps: [],
-          stage: "negotiating",
-          lastUpdatedAt: new Date().toISOString(),
-          lastUpdatedBy: "system",
-        }),
+        canonicalState: JSON.stringify(createDefaultCanonicalState()),
         members: {
           create: {
             userId: session.user.id,

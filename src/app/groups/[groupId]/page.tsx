@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { CanonicalState, AssistantStatus } from "@/lib/types";
+import { CanonicalState, AssistantStatus, MessageBlock, DetailItem } from "@/lib/types";
 import { ChatNav } from "@/components/chat-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -148,6 +148,323 @@ const PencilIcon = () => (
   </svg>
 );
 
+const ExternalLinkIcon = () => (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+);
+
+// ---- Block Renderer Components ----
+
+interface MentionContext {
+  currentUserName: string | null | undefined;
+  participants: Participant[];
+}
+
+function getStatusColor(tag?: string, status?: string): string {
+  const val = (tag || status || "").toLowerCase();
+  if (val.includes("free") || val.includes("available") || val.includes("open") || val.includes("success") || val.includes("confirmed"))
+    return "bg-emerald-500";
+  if (val.includes("busy") || val.includes("conflict") || val.includes("error") || val.includes("closed"))
+    return "bg-red-400";
+  if (val.includes("partial") || val.includes("warning") || val.includes("tentative"))
+    return "bg-amber-400";
+  return "bg-muted-foreground/40";
+}
+
+function getAlertStyles(style: string) {
+  switch (style) {
+    case "warning": return "border-amber-500/50 bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300";
+    case "error": return "border-red-500/50 bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-300";
+    case "success": return "border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
+    default: return "border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300";
+  }
+}
+
+function getTagStyle(tag: string): { dot: string; bg: string; text: string } {
+  const val = tag.toLowerCase();
+  // Highlight tags — orange, stand out
+  if (val.includes("recommend") || val.includes("top") || val.includes("best") || val.includes("pick") || val.includes("favorite") || val.includes("popular"))
+    return { dot: "bg-primary", bg: "bg-primary/15 dark:bg-primary/20", text: "text-primary" };
+  // Positive status tags — green
+  if (val.includes("free") || val.includes("available") || val.includes("open") || val.includes("confirmed") || val.includes("success"))
+    return { dot: "bg-emerald-500", bg: "bg-emerald-500/15 dark:bg-emerald-500/20", text: "text-emerald-700 dark:text-emerald-300" };
+  // Negative status tags — red
+  if (val.includes("busy") || val.includes("conflict") || val.includes("error") || val.includes("closed"))
+    return { dot: "bg-red-400", bg: "bg-red-500/15 dark:bg-red-500/20", text: "text-red-700 dark:text-red-300" };
+  // Warning tags — amber
+  if (val.includes("partial") || val.includes("warning") || val.includes("tentative"))
+    return { dot: "bg-amber-400", bg: "bg-amber-500/15 dark:bg-amber-500/20", text: "text-amber-700 dark:text-amber-300" };
+  // Default — muted
+  return { dot: "bg-muted-foreground/40", bg: "bg-muted/60", text: "text-muted-foreground" };
+}
+
+function TagBadge({ tag }: { tag: string }) {
+  const style = getTagStyle(tag);
+  return (
+    <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${style.bg} ${style.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+      {tag}
+    </span>
+  );
+}
+
+function TextBlockComponent({ block, mentions }: { block: { type: "text"; content: string; priority?: string }; mentions: MentionContext }) {
+  const isHigh = block.priority === "high";
+  return (
+    <div className={isHigh ? "text-[15px] font-medium text-foreground" : "text-[14px] text-foreground/85"}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</p>,
+          strong: ({ children }) => <strong className="font-semibold text-foreground">{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</strong>,
+          em: ({ children }) => <em>{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</em>,
+          a: ({ href, children }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">
+              {children}
+            </a>
+          ),
+          h3: ({ children }) => (
+            <h4 className="text-[15px] font-semibold mb-1.5 mt-2 first:mt-0 text-foreground">
+              {renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}
+            </h4>
+          ),
+          ul: ({ children }) => <ul className="list-none pl-0 space-y-1 my-1">{children}</ul>,
+          li: ({ children }) => (
+            <li className="flex items-start gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/50 mt-[7px] shrink-0" />
+              <span>{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</span>
+            </li>
+          ),
+        }}
+      >
+        {block.content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function OptionsBlockComponent({ block }: { block: { type: "options"; label: string; columns?: string[]; items?: DetailItem[]; recommended?: number; layout?: string } }) {
+  const [showAll, setShowAll] = useState(false);
+  const items = block.items || [];
+  const columns = block.columns || Object.keys(items[0]?.fields || {});
+  const displayItems = showAll ? items : items.slice(0, 4);
+  const hasMore = items.length > 4;
+
+  return (
+    <div className="mt-1">
+      <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{block.label}</div>
+      <div className="space-y-1.5">
+        {displayItems.map((item, i) => {
+          const isRecommended = block.recommended === i;
+          return (
+            <div
+              key={i}
+              className={`flex items-start gap-3 p-2.5 rounded-lg border transition-colors ${
+                isRecommended ? "border-primary/40 bg-primary/8 dark:bg-primary/10" : "border-border/50 dark:border-border/80 bg-muted/50 dark:bg-muted/80 hover:bg-muted/70 dark:hover:bg-muted/90"
+              }`}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[14px] font-medium text-foreground">{item.title}</span>
+                  {item.tag && <TagBadge tag={item.tag} />}
+                </div>
+                {item.subtitle && (
+                  <div className="text-[12px] text-muted-foreground mt-0.5">{item.subtitle}</div>
+                )}
+                <div className="flex items-center gap-3 mt-1 flex-wrap">
+                  {columns.map((col) => {
+                    const val = item.fields?.[col];
+                    if (!val) return null;
+                    return (
+                      <span key={col} className="text-[13px] text-foreground/75">
+                        <span className="text-muted-foreground capitalize">{col.replace(/_/g, ' ')}:</span> {val}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+              {item.link && (
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0 p-1.5 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-primary transition-colors"
+                  title="Open link"
+                >
+                  <ExternalLinkIcon />
+                </a>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {hasMore && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="text-[12px] text-primary hover:text-primary/80 mt-1.5 flex items-center gap-1"
+        >
+          {showAll ? "Show less" : `Show ${items.length - 4} more`}
+          <ChevronIcon expanded={showAll} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ComparisonBlockComponent({ block }: { block: { type: "comparison"; label: string; columns?: string[]; items?: DetailItem[]; recommended?: number } }) {
+  const items = block.items || [];
+  const columns = block.columns || Object.keys(items[0]?.fields || {});
+
+  return (
+    <div className="mt-1">
+      <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{block.label}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[13px] border-collapse">
+          <thead>
+            <tr>
+              <th className="text-left px-2.5 py-1.5 font-semibold text-foreground/80 border-b border-border/50" />
+              {columns.map((col) => (
+                <th key={col} className="text-left px-2.5 py-1.5 font-semibold text-foreground/80 border-b border-border/50 capitalize">
+                  {col.replace(/_/g, ' ')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, i) => {
+              const isRecommended = block.recommended === i;
+              return (
+                <tr key={i} className={isRecommended ? "bg-primary/5 dark:bg-primary/10" : "hover:bg-muted/30 dark:hover:bg-muted/50"}>
+                  <td className="px-2.5 py-2 font-medium text-foreground border-b border-border/30 dark:border-border/50">
+                    <div className="flex items-center gap-2">
+                      {item.title}
+                      {item.tag && <TagBadge tag={item.tag} />}
+                      {item.link && (
+                        <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary">
+                          <ExternalLinkIcon />
+                        </a>
+                      )}
+                    </div>
+                  </td>
+                  {columns.map((col) => (
+                    <td key={col} className="px-2.5 py-2 text-foreground/75 border-b border-border/30 dark:border-border/50">
+                      {item.fields?.[col] || "—"}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function TimelineBlockComponent({ block }: { block: { type: "timeline"; label: string; items?: DetailItem[] } }) {
+  const items = block.items || [];
+  return (
+    <div className="mt-1">
+      <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{block.label}</div>
+      <div className="space-y-0.5">
+        {items.map((item, i) => (
+          <div key={i} className="flex items-start gap-2.5 py-1.5">
+            <div className="mt-[5px] shrink-0">
+              <div className={`w-2 h-2 rounded-full ${getStatusColor(item.tag, item.fields?.status)}`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[13px] font-medium text-foreground">{item.title}</span>
+                {item.tag && <TagBadge tag={item.tag} />}
+              </div>
+              <div className="flex items-center gap-3 text-[12px] text-foreground/60 mt-0.5">
+                {Object.entries(item.fields || {})
+                  .filter(([k]) => k !== "status")
+                  .map(([k, v]) => (
+                    <span key={k}>{v}</span>
+                  ))}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AccordionBlockComponent({ block, mentions }: { block: { type: "accordion"; label: string; content: string; defaultOpen?: boolean }; mentions: MentionContext }) {
+  const [open, setOpen] = useState(block.defaultOpen || false);
+  return (
+    <div className="mt-1 border border-border/60 dark:border-border/80 rounded-lg overflow-hidden bg-muted/30 dark:bg-muted/80">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-[13px] font-medium text-foreground/80 hover:bg-muted/50 transition-colors"
+      >
+        <span className="flex items-center gap-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted-foreground shrink-0">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+          </svg>
+          {block.label}
+        </span>
+        <ChevronIcon expanded={open} />
+      </button>
+      {open && (
+        <div className="px-3 py-2 border-t border-border/50 text-[13px] text-foreground/75">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-relaxed">{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</p>,
+              a: ({ href, children }) => (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2">
+                  {children}
+                </a>
+              ),
+            }}
+          >
+            {block.content}
+          </ReactMarkdown>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlertBlockComponent({ block, mentions }: { block: { type: "alert"; style: string; content: string }; mentions: MentionContext }) {
+  return (
+    <div className={`mt-1 px-3 py-2 rounded-lg border-l-2 text-[13px] ${getAlertStyles(block.style)}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="mb-0 leading-relaxed">{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</p>,
+          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        }}
+      >
+        {block.content}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function BlockRenderer({ block, mentions }: { block: MessageBlock; mentions: MentionContext }) {
+  switch (block.type) {
+    case "text": return <TextBlockComponent block={block} mentions={mentions} />;
+    case "options": return <OptionsBlockComponent block={block} />;
+    case "comparison": return <ComparisonBlockComponent block={block} />;
+    case "timeline": return <TimelineBlockComponent block={block} />;
+    case "accordion": return <AccordionBlockComponent block={block} mentions={mentions} />;
+    case "alert": return <AlertBlockComponent block={block} mentions={mentions} />;
+    default: return null;
+  }
+}
+
+// ---- End Block Renderer Components ----
+
 interface Participant {
   id: string;
   kind: "human" | "assistant";
@@ -279,6 +596,7 @@ interface Message {
   authorName: string;
   role: "user" | "assistant";
   content: string;
+  details?: MessageBlock[];
   citations?: { url: string; title?: string }[];
   createdAt: string;
 }
@@ -786,7 +1104,15 @@ export default function GroupPage({
                               : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
                         }`}
                       >
-                        {msg.role === "assistant" ? (
+                        {msg.role === "assistant" && Array.isArray(msg.details) && msg.details.length > 0 ? (
+                          /* Rich block rendering for messages with structured details */
+                          <div className="space-y-2">
+                            {msg.details.map((block, i) => (
+                              <BlockRenderer key={i} block={block} mentions={{ currentUserName: session.user?.name, participants: group.participants }} />
+                            ))}
+                          </div>
+                        ) : msg.role === "assistant" ? (
+                          /* Fallback: existing ReactMarkdown for old messages or text-only */
                           <div className="prose prose-sm prose-invert max-w-none prose-chat">
                             <ReactMarkdown
                               remarkPlugins={[remarkGfm]}
@@ -1101,7 +1427,7 @@ function TurnIndicator({
 
   const statusInfo = activeStatus
     ? getStatusInfo(activeStatus.type)
-    : { icon: <BrainIcon />, label: fallbackText || "Processing" };
+    : { icon: <BrainIcon />, label: "thinking" };
 
   const displayName = activeStatus?.assistantName || fallbackText || "Assistant";
 

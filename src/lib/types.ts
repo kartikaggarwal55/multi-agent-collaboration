@@ -31,6 +31,67 @@ export interface Citation {
   citedText?: string;
 }
 
+// Block-based message rendering types
+
+/** A single data row within options/comparison/timeline blocks */
+export interface DetailItem {
+  title: string;
+  subtitle?: string;
+  fields: Record<string, string>;
+  link?: string;
+  tag?: string;
+}
+
+export interface TextBlock {
+  type: "text";
+  content: string;
+  priority?: "high" | "normal";
+}
+
+export interface OptionsBlock {
+  type: "options";
+  label: string;
+  columns: string[];
+  items: DetailItem[];
+  recommended?: number;
+  layout?: "cards" | "list";
+}
+
+export interface ComparisonBlock {
+  type: "comparison";
+  label: string;
+  columns: string[];
+  items: DetailItem[];
+  recommended?: number;
+}
+
+export interface TimelineBlock {
+  type: "timeline";
+  label: string;
+  items: DetailItem[];
+}
+
+export interface AccordionBlock {
+  type: "accordion";
+  label: string;
+  content: string;
+  defaultOpen?: boolean;
+}
+
+export interface AlertBlock {
+  type: "alert";
+  style: "info" | "warning" | "success" | "error";
+  content: string;
+}
+
+export type MessageBlock =
+  | TextBlock
+  | OptionsBlock
+  | ComparisonBlock
+  | TimelineBlock
+  | AccordionBlock
+  | AlertBlock;
+
 export interface Message {
   id: string;
   roomId: string;
@@ -42,7 +103,7 @@ export interface Message {
   citations?: Citation[];
 }
 
-// CHANGED: Added OpenQuestion type for structured question tracking
+// Structured question tracking
 export interface OpenQuestion {
   id: string;
   target: string; // Dynamic participant name or "All"
@@ -52,7 +113,7 @@ export interface OpenQuestion {
   resolved: boolean;
 }
 
-// CHANGED: Added constraint tracking per participant
+// Constraint tracking per participant
 export interface ParticipantConstraint {
   participantId: string;
   constraint: string;
@@ -70,7 +131,7 @@ export interface PendingDecision {
   confirmationsReceived?: string[]; // Participant IDs who have confirmed
 }
 
-// CHANGED: Added structured canonical state for right panel
+// Structured canonical state for right panel
 export interface CanonicalState {
   goal: string;
   leadingOption: string;
@@ -85,7 +146,24 @@ export interface CanonicalState {
   lastUpdatedBy: string;
 }
 
-// CHANGED: Added TurnMeta for structured assistant output
+/** Create a fresh canonical state with default values */
+export function createDefaultCanonicalState(): CanonicalState {
+  return {
+    goal: "",
+    leadingOption: "",
+    statusSummary: [],
+    constraints: [],
+    openQuestions: [],
+    pendingDecisions: [],
+    suggestedNextSteps: [],
+    completedNextSteps: [],
+    stage: "negotiating",
+    lastUpdatedAt: new Date().toISOString(),
+    lastUpdatedBy: "system",
+  };
+}
+
+// Structured assistant output metadata
 export type NextAction = "CONTINUE" | "WAIT_FOR_USER" | "HANDOFF_DONE";
 
 export interface TurnMeta {
@@ -97,7 +175,7 @@ export interface TurnMeta {
   next_speaker?: string; // Dynamic assistant ID
 }
 
-// CHANGED: State patch structure for incremental updates
+// State patch structure for incremental updates
 export interface StatePatch {
   leading_option?: string;
   status_summary?: string[];
@@ -109,17 +187,7 @@ export interface StatePatch {
   stage?: CanonicalState["stage"];
 }
 
-// CHANGED: Updated RoomState with canonical structured state
-export interface RoomState {
-  id: string;
-  goal?: string;
-  participants: Participant[];
-  messages: Message[];
-  summary: string; // Legacy field for backwards compat
-  canonicalState: CanonicalState; // CHANGED: New structured state
-}
-
-// CHANGED: Added stop reason enum for orchestrator
+// Stop reason enum for orchestrator
 export type StopReason =
   | "WAIT_FOR_USER"
   | "HANDOFF_DONE"
@@ -128,7 +196,7 @@ export type StopReason =
   | "ERROR"
   | "CANCELLED";
 
-// CHANGED: Added run state for orchestrator
+// Run state for orchestrator
 export interface OrchestratorRunState {
   runId: string;
   turnCount: number;
@@ -139,8 +207,3 @@ export interface OrchestratorRunState {
   cancelled: boolean;
 }
 
-// Preferences for each human participant
-export interface HumanPreferences {
-  humanId: string;
-  preferences: string;
-}

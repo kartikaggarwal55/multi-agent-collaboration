@@ -7,6 +7,7 @@ import {
   updateUserProfile,
   ProfileChange,
 } from "@/lib/profile";
+import { stripCiteTags, callWithRetry } from "@/lib/api-utils";
 import {
   privateAssistantSystemPrompt,
   formatPrivateConversation,
@@ -26,8 +27,8 @@ import {
 import { validateGmailAccess } from "@/lib/gmail";
 import {
   MAPS_TOOLS,
-  executeMapseTool,
-  isMapseTool,
+  executeMapsTool,
+  isMapsTool,
   isMapsConfigured,
 } from "@/lib/agents/maps-tools";
 import {
@@ -39,39 +40,8 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic();
 const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
-const RATE_LIMIT_RETRY_DELAY_MS = 2000;
-const MAX_RATE_LIMIT_RETRIES = 2;
 
 const MAX_MESSAGE_LENGTH = 10000; // 10k characters max
-
-// Helper to strip <cite> tags from web search results while preserving content
-function stripCiteTags(text: string): string {
-  return text.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/g, "$1");
-}
-
-// Helper for rate-limited API calls with exponential backoff
-async function callWithRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = MAX_RATE_LIMIT_RETRIES
-): Promise<T> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isRateLimit = errorMessage.includes("429") || errorMessage.includes("rate_limit");
-
-      if (isRateLimit && attempt < maxRetries) {
-        const delay = RATE_LIMIT_RETRY_DELAY_MS * Math.pow(2, attempt);
-        console.log(`Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        continue;
-      }
-      throw error;
-    }
-  }
-  throw new Error("Max retries exceeded");
-}
 
 const messageSchema = z.object({
   content: z.string().min(1).max(MAX_MESSAGE_LENGTH),
@@ -363,9 +333,9 @@ export async function POST(request: Request) {
                     tool_use_id: block.id,
                     content: toolResult,
                   });
-                } else if (isMapseTool(block.name)) {
+                } else if (isMapsTool(block.name)) {
                   sendEvent("status", { status: `Searching places...` });
-                  const toolResult = await executeMapseTool(
+                  const toolResult = await executeMapsTool(
                     block.name,
                     block.input as Record<string, unknown>
                   );

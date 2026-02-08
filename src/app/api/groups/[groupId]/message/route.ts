@@ -7,7 +7,8 @@ import {
   GroupParticipant,
   GroupMessageData,
 } from "@/lib/agents/group-orchestrator";
-import { CanonicalState } from "@/lib/types";
+import { CanonicalState, createDefaultCanonicalState } from "@/lib/types";
+import { getUserScopes } from "@/lib/api-utils";
 
 // POST /api/groups/[groupId]/message - Send a message and trigger orchestration
 export async function POST(
@@ -87,19 +88,7 @@ export async function POST(
 
     // Check which members have calendar and gmail connected
     const memberUserIds = group.members.map((m) => m.userId);
-    const accounts = await prisma.account.findMany({
-      where: {
-        userId: { in: memberUserIds },
-        provider: "google",
-      },
-      select: { userId: true, scope: true },
-    });
-    const usersWithCalendar = new Set(
-      accounts.filter((a) => a.scope?.includes("calendar")).map((a) => a.userId)
-    );
-    const usersWithGmail = new Set(
-      accounts.filter((a) => a.scope?.includes("gmail")).map((a) => a.userId)
-    );
+    const { usersWithCalendar, usersWithGmail } = await getUserScopes(memberUserIds);
 
     // Build participants list
     const participants: GroupParticipant[] = [];
@@ -161,19 +150,7 @@ export async function POST(
         canonicalState.completedNextSteps = [];
       }
     } catch {
-      canonicalState = {
-        goal: "",
-        leadingOption: "",
-        statusSummary: [],
-        constraints: [],
-        openQuestions: [],
-        pendingDecisions: [],
-        suggestedNextSteps: [],
-        completedNextSteps: [],
-        stage: "negotiating",
-        lastUpdatedAt: new Date().toISOString(),
-        lastUpdatedBy: "system",
-      };
+      canonicalState = createDefaultCanonicalState();
     }
 
     // Create SSE stream

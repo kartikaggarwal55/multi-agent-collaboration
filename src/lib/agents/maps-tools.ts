@@ -18,7 +18,7 @@ const MAPS_TOOL_NAMES = ["maps_search_places", "maps_get_place_details", "maps_d
 /**
  * Check if a tool name is a Maps tool
  */
-export function isMapseTool(toolName: string): boolean {
+export function isMapsTool(toolName: string): boolean {
   return MAPS_TOOL_NAMES.includes(toolName);
 }
 
@@ -98,7 +98,7 @@ Tips:
 /**
  * Execute a Maps tool
  */
-export async function executeMapseTool(
+export async function executeMapsTool(
   toolName: string,
   input: Record<string, unknown>
 ): Promise<string> {

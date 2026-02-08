@@ -1,10 +1,5 @@
-// CHANGED: Profile management functions for private assistant
+// Profile management functions for private assistant
 import { prisma } from "./db";
-
-// Profile item type
-export interface ProfileItem {
-  text: string;
-}
 
 // Profile change log entry
 export interface ProfileChange {

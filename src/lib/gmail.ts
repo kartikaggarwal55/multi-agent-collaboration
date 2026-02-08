@@ -1,6 +1,6 @@
 // Gmail service for reading user emails
 import { google, gmail_v1 } from "googleapis";
-import { prisma } from "./db";
+import { getOAuth2Client } from "./google-auth";
 
 // Types
 export interface GmailMessage {
@@ -34,69 +34,6 @@ export interface GmailError {
   error: string;
   code?: string;
   needsReconnect?: boolean;
-}
-
-// OAuth2 client result type
-type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
-type OAuth2Result =
-  | { error: string; needsReconnect: boolean }
-  | { client: OAuth2Client };
-
-/**
- * Get OAuth2 client with user's tokens
- */
-async function getOAuth2Client(userId: string): Promise<OAuth2Result> {
-  // Find accounts with gmail scope specifically
-  const accounts = await prisma.account.findMany({
-    where: {
-      userId,
-      provider: "google",
-    },
-  });
-
-  // Prefer account with gmail scope
-  const account = accounts.find(a => a.scope?.includes("gmail")) || accounts[0];
-
-  if (!account) {
-    return { error: "No Google account connected", needsReconnect: true };
-  }
-
-  if (!account.access_token) {
-    return { error: "No access token available", needsReconnect: true };
-  }
-
-  // Check if Gmail scope is present
-  if (!account.scope?.includes("gmail")) {
-    return { error: "Gmail access not granted. Please reconnect Google.", needsReconnect: true };
-  }
-
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET
-  );
-
-  oauth2Client.setCredentials({
-    access_token: account.access_token,
-    refresh_token: account.refresh_token || undefined,
-    expiry_date: account.expires_at ? account.expires_at * 1000 : undefined,
-  });
-
-  // Handle token refresh
-  oauth2Client.on("tokens", async (tokens) => {
-    if (tokens.access_token) {
-      await prisma.account.update({
-        where: { id: account.id },
-        data: {
-          access_token: tokens.access_token,
-          expires_at: tokens.expiry_date
-            ? Math.floor(tokens.expiry_date / 1000)
-            : null,
-        },
-      });
-    }
-  });
-
-  return { client: oauth2Client };
 }
 
 /**
@@ -274,7 +211,7 @@ export async function searchGmailMessages(
   query: string,
   maxResults: number = 10
 ): Promise<GmailSearchResult | GmailError> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "gmail");
 
   if ("error" in result) {
     return { error: result.error, needsReconnect: result.needsReconnect };
@@ -349,7 +286,7 @@ export async function getGmailThread(
   userId: string,
   threadId: string
 ): Promise<GmailThread | GmailError> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "gmail");
 
   if ("error" in result) {
     return { error: result.error, needsReconnect: result.needsReconnect };
@@ -398,7 +335,7 @@ export async function getGmailMessage(
   userId: string,
   messageId: string
 ): Promise<GmailMessage | GmailError> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "gmail");
 
   if ("error" in result) {
     return { error: result.error, needsReconnect: result.needsReconnect };
@@ -495,7 +432,7 @@ export function formatGmailMessageForDisplay(msg: GmailMessage): string {
  * Makes a lightweight API call to verify the token is valid
  */
 export async function validateGmailAccess(userId: string): Promise<boolean> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "gmail");
 
   if ("error" in result) {
     return false;

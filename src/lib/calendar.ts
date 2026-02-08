@@ -1,6 +1,6 @@
-// CHANGED: Google Calendar service for reading user events
+// Google Calendar service for reading user events
 import { google, calendar_v3 } from "googleapis";
-import { prisma } from "./db";
+import { getOAuth2Client } from "./google-auth";
 
 // Default timezone for formatting - prevents UTC issues on Vercel
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
@@ -25,66 +25,8 @@ export interface CalendarError {
   needsReconnect?: boolean;
 }
 
-// CHANGED: Type for OAuth2 client result
-type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
-type OAuth2Result =
-  | { error: string; needsReconnect: boolean }
-  | { client: OAuth2Client };
-
 /**
- * CHANGED: Get OAuth2 client with user's tokens
- */
-async function getOAuth2Client(userId: string): Promise<OAuth2Result> {
-  // Get user's Google accounts and prefer one with calendar scope
-  const accounts = await prisma.account.findMany({
-    where: {
-      userId,
-      provider: "google",
-    },
-  });
-
-  // Prefer account with calendar scope
-  const account = accounts.find(a => a.scope?.includes("calendar")) || accounts[0];
-
-  if (!account) {
-    return { error: "No Google account connected", needsReconnect: true };
-  }
-
-  if (!account.access_token) {
-    return { error: "No access token available", needsReconnect: true };
-  }
-
-  const oauth2Client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET
-  );
-
-  oauth2Client.setCredentials({
-    access_token: account.access_token,
-    refresh_token: account.refresh_token || undefined,
-    expiry_date: account.expires_at ? account.expires_at * 1000 : undefined,
-  });
-
-  // CHANGED: Handle token refresh
-  oauth2Client.on("tokens", async (tokens) => {
-    if (tokens.access_token) {
-      await prisma.account.update({
-        where: { id: account.id },
-        data: {
-          access_token: tokens.access_token,
-          expires_at: tokens.expiry_date
-            ? Math.floor(tokens.expiry_date / 1000)
-            : null,
-        },
-      });
-    }
-  });
-
-  return { client: oauth2Client };
-}
-
-/**
- * CHANGED: List calendar events within a time range
+ * List calendar events within a time range
  */
 export async function listCalendarEvents(
   userId: string,
@@ -92,7 +34,7 @@ export async function listCalendarEvents(
   timeMax: string,
   maxResults: number = 10
 ): Promise<CalendarEvent[] | CalendarError> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "calendar");
 
   if ("error" in result) {
     return { error: result.error, needsReconnect: result.needsReconnect };
@@ -138,14 +80,14 @@ export async function listCalendarEvents(
 }
 
 /**
- * CHANGED: Get free/busy information for a time range
+ * Get free/busy information for a time range
  */
 export async function getFreeBusy(
   userId: string,
   timeMin: string,
   timeMax: string
 ): Promise<FreeBusyBlock[] | CalendarError> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "calendar");
 
   if ("error" in result) {
     return { error: result.error, needsReconnect: result.needsReconnect };
@@ -288,7 +230,7 @@ export function formatFreeBusyForDisplay(
  * Makes a lightweight API call to verify the token is valid
  */
 export async function validateCalendarAccess(userId: string): Promise<boolean> {
-  const result = await getOAuth2Client(userId);
+  const result = await getOAuth2Client(userId, "calendar");
 
   if ("error" in result) {
     return false;

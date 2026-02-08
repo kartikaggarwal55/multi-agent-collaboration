@@ -4,47 +4,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { getUserProfile, formatProfileForPrompt } from "@/lib/profile";
+import { stripCiteTags, callWithRetry, getCurrentDateTime } from "@/lib/api-utils";
 import { createCalendarToolsForUser, executeCalendarTool } from "./calendar-tools";
 import { createGmailToolsForUser, executeGmailTool } from "./gmail-tools";
-import { MAPS_TOOLS, executeMapseTool, isMapseTool, isMapsConfigured } from "./maps-tools";
+import { MAPS_TOOLS, executeMapsTool, isMapsTool, isMapsConfigured } from "./maps-tools";
 import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
-import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion, AssistantStatus, AssistantStatusType } from "../types";
+import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion, AssistantStatus, AssistantStatusType, MessageBlock } from "../types";
 import { filterMessageForPrivacy } from "./privacy-filter";
 import { detectCompletedSteps } from "./step-completion-detector";
 
 const anthropic = new Anthropic();
 const ASSISTANT_MODEL = process.env.ASSISTANT_MODEL || "claude-opus-4-5";
-const RATE_LIMIT_RETRY_DELAY_MS = 2000;
-const MAX_RATE_LIMIT_RETRIES = 2;
-
-// Helper to strip <cite> tags from web search results while preserving content
-function stripCiteTags(text: string): string {
-  return text.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/g, "$1");
-}
-
-// Helper for rate-limited API calls with exponential backoff
-async function callWithRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = MAX_RATE_LIMIT_RETRIES
-): Promise<T> {
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isRateLimit = errorMessage.includes("429") || errorMessage.includes("rate_limit");
-
-      if (isRateLimit && attempt < maxRetries) {
-        const delay = RATE_LIMIT_RETRY_DELAY_MS * Math.pow(2, attempt);
-        console.log(`Rate limited, waiting ${delay}ms before retry ${attempt + 1}/${maxRetries}`);
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        continue;
-      }
-      throw error;
-    }
-  }
-  throw new Error("Max retries exceeded");
-}
 
 // Event types for streaming
 export type GroupCollaborationEvent =
@@ -62,6 +32,7 @@ export interface GroupMessageData {
   authorName: string;
   role: "user" | "assistant";
   content: string;
+  details?: MessageBlock[];
   citations?: Citation[];
   createdAt: string;
 }
@@ -82,9 +53,11 @@ function createEmitTurnTool(humanNames: string[], assistantNames: string[]) {
     name: "emit_turn",
     description: `Submit your response to the group. Call this tool ONCE at the end of your turn after gathering all needed information.
 
-IMPORTANT: This is how you respond to the group. Your public_message is what everyone will see.
-- If you used tools (calendar, gmail, web search), synthesize results into a helpful response
-- If you couldn't find what was asked, explain what you searched and suggest alternatives
+IMPORTANT: Your response has two parts:
+1. public_message: A concise 1-3 sentence plain text summary (used for conversation context)
+2. blocks: An ordered array of UI components that the user will see (text, options cards, timelines, etc.)
+
+- If you used tools (calendar, gmail, web search), put the summary in public_message and structured results in blocks
 - Set skip_turn=true if you weren't addressed and have no relevant new information to share`,
     input_schema: {
       type: "object" as const,
@@ -95,7 +68,52 @@ IMPORTANT: This is how you respond to the group. Your public_message is what eve
         },
         public_message: {
           type: "string",
-          description: "Your complete message to the group. This is what everyone will read.",
+          description: "Plain text summary of your response (1-3 sentences). Used for conversation context and notifications. Should capture the key point without any formatting.",
+        },
+        blocks: {
+          type: "array",
+          description: "Your response as a sequence of UI blocks. Order matters — lead with the most important info. Each block renders as a specific component. Default to text blocks (rendered as markdown) unless you have genuine structured data (search results, calendar data, comparisons) that benefits from a richer component.",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                enum: ["text", "options", "comparison", "timeline", "accordion", "alert"],
+                description: "text: markdown (default, use for most content). options: list of choices (flights/hotels/places/emails). comparison: side-by-side table. timeline: chronological events (calendar/schedule). accordion: collapsible secondary info. alert: highlighted callout.",
+              },
+              content: { type: "string", description: "Markdown text (for text, accordion, alert blocks)" },
+              priority: { type: "string", enum: ["high", "normal"], description: "For text blocks: 'high' = lead summary with emphasis" },
+              label: { type: "string", description: "Section heading for options/comparison/timeline/accordion" },
+              columns: {
+                type: "array",
+                items: { type: "string" },
+                description: "Field keys to display as columns (e.g., ['price','departs','duration'])",
+              },
+              items: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string", description: "Primary label (airline+flight, hotel name, place name, day)" },
+                    subtitle: { type: "string", description: "Secondary info (route, neighborhood, date range)" },
+                    fields: {
+                      type: "object",
+                      additionalProperties: { type: "string" },
+                      description: "Dynamic key-value data. Keys should match columns array.",
+                    },
+                    link: { type: "string", description: "Action URL (booking page, Gmail link, Maps link)" },
+                    tag: { type: "string", description: "Badge text: 'Best price', 'Recommended', 'Open now', 'Conflict'" },
+                  },
+                  required: ["title", "fields"],
+                },
+              },
+              recommended: { type: "integer", description: "0-based index of recommended item" },
+              layout: { type: "string", enum: ["cards", "list"] },
+              defaultOpen: { type: "boolean", description: "For accordion: start expanded (default false)" },
+              style: { type: "string", enum: ["info", "warning", "success", "error"], description: "For alert blocks" },
+            },
+            required: ["type"],
+          },
         },
         next_action: {
           type: "string",
@@ -154,42 +172,6 @@ Otherwise, if waiting on human input → WAIT_FOR_USER`,
       required: ["skip_turn"],
     },
   };
-}
-
-// Default timezone - must match calendar.ts
-const DEFAULT_TIMEZONE = "America/Los_Angeles";
-
-// Get current date/time formatted for the prompt with context
-function getCurrentDateTime(): string {
-  const now = new Date();
-  const formatted = now.toLocaleString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-    timeZone: DEFAULT_TIMEZONE,
-  });
-
-  // Get date parts in the correct timezone
-  const year = parseInt(now.toLocaleString("en-US", { year: "numeric", timeZone: DEFAULT_TIMEZONE }));
-  const month = parseInt(now.toLocaleString("en-US", { month: "numeric", timeZone: DEFAULT_TIMEZONE })) - 1;
-  const day = now.toLocaleString("en-US", { day: "2-digit", timeZone: DEFAULT_TIMEZONE });
-  const monthStr = now.toLocaleString("en-US", { month: "2-digit", timeZone: DEFAULT_TIMEZONE });
-  const isoDate = `${year}-${monthStr}-${day}`;
-
-  // Determine the year for upcoming months
-  const nextYear = year + 1;
-  const upcomingMonthYear = month >= 10 ? nextYear : year; // Nov/Dec → next year for Jan/Feb
-
-  return `${formatted}
-ISO Date: ${isoDate}
-Timezone: ${DEFAULT_TIMEZONE}
-Current Year: ${year}
-
-IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${year} if that month has passed).`;
 }
 
 function generateSystemPrompt(
@@ -396,45 +378,46 @@ When skipping:
 - Do NOT provide a public_message
 - Do NOT announce that you're skipping - just skip silently
 
-## Response Format (CRITICAL for readability)
+## Response Format — Block-Based Messages (CRITICAL)
 
-Structure your messages for quick scanning. Users read on mobile and in busy chats.
+Your response is a sequence of **blocks**. Each block renders as a specific UI component. Order them by importance — lead with the key info.
 
-**Start with a 1-line summary** if your message has multiple points:
-> "Found 3 flight options and checked ${ownerName}'s calendar - here's what works:"
+**Default to text blocks** (rendered as markdown). Only use rich blocks (options, comparison, timeline) when you have genuine structured data from tool results. Don't force data into components when a simple sentence works better.
 
-**Use headers** to separate distinct topics:
-> ### Flights
-> ### Calendar Conflicts
-> ### Next Steps
+### Block composition pattern:
+1. **Lead with a text block** (priority: "high") — the key decision point or finding in 1-2 sentences
+2. **Follow with data blocks** if you have structured results — options/comparison/timeline
+3. **End with a text block** — question for the user, next step, or @mention
 
-**Use bullet points** for lists and options - never wall-of-text:
-> - **Option A**: Southwest $180, departs 9am [Book here](url)
-> - **Option B**: United $220, departs 2pm [Book here](url)
+### When to use each block type:
+- \`text\` — Default. Summary sentences, questions, @mentions, explanations. Keep each text block short (1-3 sentences). Use markdown formatting (bold, links, bullets) within text blocks.
+- \`options\` — Search results with 2+ items: flights, hotels, restaurants, emails. Each item must have a title and structured fields. Include links.
+- \`comparison\` — Comparing 2-4 specific options side by side across multiple dimensions. Only when explicitly comparing.
+- \`timeline\` — Calendar availability, schedules, itineraries. Each item has a time/day and status.
+- \`accordion\` — Use generously for anything that's useful but secondary: full email body, all reviews, hotel amenities/details, search methodology, trip summaries/recaps, booking details, policy info, itinerary breakdowns. When in doubt about whether info is primary or secondary, put it in an accordion. The user can expand it if they want it.
+- \`alert\` — Conflicts, warnings, important callouts. Use sparingly (1 per message max).
 
-**Bold the key info** users need to see:
-> - **Price**: $180 roundtrip
-> - **Dates**: Jan 15-18
-> - **Conflict**: ${ownerName} has a meeting on the 16th
+### Examples:
 
-**Use tables** for comparing 3+ options:
-| Flight | Price | Departs | Link |
-|--------|-------|---------|------|
-| Southwest | $180 | 9am | [Book](url) |
+**Flight search →** text lead + options block:
+blocks: [text(high): "Found 3 flights to LA, cheapest is Southwest at $180.", options: flights with price/time/link, text: "@${ownerName} — which works?"]
 
-**Keep paragraphs short** (1-2 sentences max). Break up longer explanations.
+**Calendar check →** text lead + alert + timeline:
+blocks: [text(high): "${ownerName} is free Jan 15-16 but has a conflict on the 17th.", alert(warning): conflict details, timeline: day-by-day availability]
 
-**Links are mandatory** - always include clickable links inline:
-- Flights: [View on Google Flights](url) or airline booking pages
-- Hotels: [Book on Hotels.com](url) or hotel websites
-- Restaurants/Places: [View on Google Maps](url)
-- Emails: [Open in Gmail](url)
-- Calendar events: [View in Calendar](url)
+**Simple coordination →** just text blocks:
+blocks: [text(high): "@OtherAssistant — my owner prefers budget options. What's your owner's preference?"]
 
-**End with a clear question or action** if you need a response:
-> @${ownerName} - Option A or B?
+### Rules:
+- NEVER dump raw tool output into a text block. Use options/comparison/timeline for structured data.
+- Every response MUST have at least one text block with priority "high".
+- Keep text blocks short — 1-3 sentences each.
+- Include links in detail items' link field, not inline in text.
+- Use @mentions when addressing assistants or your owner.
+- The public_message field should be a 1-2 sentence plain text summary.
+- Do NOT produce summaries or recaps of the conversation/trip/plan as text blocks. If a summary is genuinely useful, put it in an accordion. The user can see the conversation history — don't repeat it.
+- Prefer accordions over text blocks for anything beyond the core decision point. Details, amenities, terms, full content — all accordion.
 
-Use @mentions when addressing assistants or your owner.
 Update state_patch with new constraints, leading options, etc.
 
 ## Next Steps (Important)
@@ -552,7 +535,13 @@ export async function* orchestrateGroupRun(
       }
 
       // Create and save message
-      if (result.content) {
+      // Derive content from blocks if public_message was empty
+      const messageContent = result.content || (result.blocks
+        ?.filter((b): b is { type: "text"; content: string } => b.type === "text" && !!b.content)
+        .map(b => b.content)
+        .join(" ") || "");
+
+      if (messageContent || (result.blocks && result.blocks.length > 0)) {
         // Emit status: applying privacy filter
         yield {
           type: "assistant_status",
@@ -562,7 +551,7 @@ export async function* orchestrateGroupRun(
         // Apply privacy filter before sending message
         const allParticipantNames = participants.map(p => p.displayName);
         const filterResult = await filterMessageForPrivacy(
-          result.content,
+          messageContent,
           currentState,
           owner.displayName,
           allParticipantNames
@@ -579,6 +568,7 @@ export async function* orchestrateGroupRun(
           authorName: assistant.displayName,
           role: "assistant",
           content: filterResult.filteredMessage,
+          details: result.blocks || undefined,
           citations: result.citations.length > 0 ? result.citations : undefined,
           createdAt: new Date().toISOString(),
         };
@@ -592,10 +582,12 @@ export async function* orchestrateGroupRun(
             role: "assistant",
             content: messageData.content,
             citations: result.citations.length > 0 ? JSON.stringify(result.citations) : null,
+            details: result.blocks ? JSON.stringify(result.blocks) : null,
           },
         });
 
-        messages.push(messageData);
+        // Push only content (no blocks) for conversation context — keeps it lean
+        messages.push({ ...messageData, details: undefined });
         yield { type: "message", message: messageData };
         anyPosted = true;
         console.log(`[Orchestrator] ${assistant.displayName} posted, next_action: ${result.nextAction}`);
@@ -660,8 +652,9 @@ export async function* orchestrateGroupRun(
         continueCollaboration = true;
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`Error with ${assistant.displayName}:`, error);
-      yield { type: "error", error: `${assistant.displayName} encountered an error` };
+      yield { type: "error", error: `${assistant.displayName} encountered an error: ${errorMsg}` };
     }
     } // end for loop
 
@@ -685,6 +678,7 @@ export async function* orchestrateGroupRun(
 interface AssistantResult {
   skipped: boolean;
   content: string;
+  blocks: MessageBlock[] | null;
   citations: Citation[];
   statePatch: Partial<StatePatch> | null;
   nextAction: string;
@@ -758,7 +752,7 @@ async function callAssistant(
   let response = await callWithRetry(() =>
     anthropic.messages.create({
       model: ASSISTANT_MODEL,
-      max_tokens: 4096,
+      max_tokens: 3072,
       temperature: 0.2, // Low temperature for consistency with some flexibility
       system: systemPrompt,
       tools,
@@ -773,6 +767,7 @@ async function callAssistant(
   interface EmitTurnInput {
     skip_turn?: boolean;
     public_message?: string;
+    blocks?: MessageBlock[];
     next_action?: string;
     state_patch?: Partial<StatePatch>;
   }
@@ -833,8 +828,8 @@ async function callAssistant(
       } else if (gmailToolNames.includes(toolUse.name)) {
         const result = await executeGmailTool(ownerId, toolUse.name, toolUse.input as Record<string, unknown>);
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
-      } else if (isMapseTool(toolUse.name)) {
-        const result = await executeMapseTool(toolUse.name, toolUse.input as Record<string, unknown>);
+      } else if (isMapsTool(toolUse.name)) {
+        const result = await executeMapsTool(toolUse.name, toolUse.input as Record<string, unknown>);
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
       } else if (isDateTool(toolUse.name)) {
         console.log(`[DateTool] Calling ${toolUse.name} with:`, toolUse.input);
@@ -881,7 +876,7 @@ async function callAssistant(
       response = await callWithRetry(() =>
         anthropic.messages.create({
           model: ASSISTANT_MODEL,
-          max_tokens: 4096,
+          max_tokens: 3072,
           temperature: 0.2,
           system: systemPrompt,
           tools,
@@ -901,7 +896,17 @@ async function callAssistant(
   // Determine final content
   let finalContent = emitTurnResult?.public_message || "";
 
-  // If no explicit message but we have text (from searches), use that
+  // If no public_message but we have blocks, derive content from text blocks
+  if (!finalContent && emitTurnResult?.blocks?.length) {
+    const textBlocks = emitTurnResult.blocks.filter(
+      (b): b is { type: "text"; content: string } => b.type === "text" && !!b.content
+    );
+    if (textBlocks.length > 0) {
+      finalContent = textBlocks.map(b => b.content).join(" ");
+    }
+  }
+
+  // If still no content but we have text (from searches), use that
   if (!finalContent && allText.trim()) {
     finalContent = allText.trim();
   }
@@ -920,6 +925,7 @@ async function callAssistant(
   return {
     skipped,
     content: stripCiteTags(finalContent),
+    blocks: emitTurnResult?.blocks || null,
     citations: allCitations,
     statePatch: emitTurnResult?.state_patch || null,
     nextAction: emitTurnResult?.next_action || "WAIT_FOR_USER",
