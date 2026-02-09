@@ -179,7 +179,7 @@ function getTagStyle(tag: string): { dot: string; bg: string; text: string } {
   const val = tag.toLowerCase();
   // Highlight tags — primary accent
   if (val.includes("recommend") || val.includes("top") || val.includes("best") || val.includes("pick") || val.includes("favorite") || val.includes("popular"))
-    return { dot: "bg-primary", bg: "bg-primary/15 dark:bg-primary/20", text: "text-primary" };
+    return { dot: "bg-primary", bg: "bg-primary/15", text: "text-primary" };
   // Default — muted
   return { dot: "bg-muted-foreground/40", bg: "bg-muted/60", text: "text-muted-foreground" };
 }
@@ -320,8 +320,8 @@ function ComparisonBlockComponent({ block }: { block: { type: "comparison"; labe
             {items.map((item, i) => {
               const isRecommended = block.recommended === i;
               return (
-                <tr key={i} className={isRecommended ? "bg-primary/5 dark:bg-primary/10" : "hover:bg-muted/30 dark:hover:bg-muted/50"}>
-                  <td className="px-2.5 py-2 font-medium text-foreground border-b border-border/30 dark:border-white/25">
+                <tr key={i} className={isRecommended ? "bg-primary/5" : "hover:bg-muted/30"}>
+                  <td className="px-2.5 py-2 font-medium text-foreground border-b border-white/12">
                     <div className="flex items-center gap-2">
                       {item.title}
                       {item.tag && <TagBadge tag={item.tag} />}
@@ -333,7 +333,7 @@ function ComparisonBlockComponent({ block }: { block: { type: "comparison"; labe
                     </div>
                   </td>
                   {columns.map((col) => (
-                    <td key={col} className="px-2.5 py-2 text-foreground/75 border-b border-border/30 dark:border-white/25">
+                    <td key={col} className="px-2.5 py-2 text-foreground/75 border-b border-white/12">
                       {item.fields?.[col] || "—"}
                     </td>
                   ))}
