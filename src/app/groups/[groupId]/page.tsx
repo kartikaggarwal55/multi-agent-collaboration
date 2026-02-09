@@ -1483,16 +1483,39 @@ function StatePanel({
       {canonicalState.leadingOption && (
         <div>
           <SectionHeader accent>Current Plan</SectionHeader>
-          <ul className="text-[14px] leading-[1.6] text-foreground space-y-1 list-disc pl-4">
-            {canonicalState.leadingOption.split("\n").filter(l => l.trim()).map((line, i) => {
-              const clean = line.replace(/^[-•]\s*/, "").replace(/\*\*(.+?)\*\*/g, "$1");
-              const colonIdx = clean.indexOf(":");
-              if (colonIdx > 0 && colonIdx < 30) {
-                return <li key={i}><span className="font-medium">{clean.slice(0, colonIdx + 1)}</span>{clean.slice(colonIdx + 1)}</li>;
-              }
-              return <li key={i}>{clean}</li>;
-            })}
-          </ul>
+          {(() => {
+            const lines = canonicalState.leadingOption.split("\n").filter(l => l.trim());
+            const isBullet = (l: string) => /^[-•]/.test(l.trim());
+            const goalLines = [];
+            let bulletStart = 0;
+            for (let i = 0; i < lines.length; i++) {
+              if (isBullet(lines[i])) { bulletStart = i; break; }
+              goalLines.push(lines[i]);
+              bulletStart = i + 1;
+            }
+            const bulletLines = lines.slice(bulletStart);
+            return (
+              <>
+                {goalLines.length > 0 && (
+                  <p className="text-[14px] leading-[1.6] text-foreground font-medium mb-1">
+                    {goalLines.join(" ").replace(/\*\*(.+?)\*\*/g, "$1")}
+                  </p>
+                )}
+                {bulletLines.length > 0 && (
+                  <ul className="text-[14px] leading-[1.6] text-foreground space-y-1 list-disc pl-4">
+                    {bulletLines.map((line, i) => {
+                      const clean = line.replace(/^[-•]\s*/, "").replace(/\*\*(.+?)\*\*/g, "$1");
+                      const colonIdx = clean.indexOf(":");
+                      if (colonIdx > 0 && colonIdx < 30) {
+                        return <li key={i}><span className="font-medium">{clean.slice(0, colonIdx + 1)}</span>{clean.slice(colonIdx + 1)}</li>;
+                      }
+                      return <li key={i}>{clean}</li>;
+                    })}
+                  </ul>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
 

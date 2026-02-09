@@ -422,7 +422,8 @@ blocks: [text(high): "@OtherAssistant — my owner prefers budget options. What'
 The \`leading_option\` field in state_patch is the most important piece of state — it's the first thing a user sees in the side panel. Treat it as a **rolling snapshot** of everything decided or leaning toward so far.
 
 **How to write it:**
-- Use **bullet points** — one bullet per decided/leaning dimension (e.g. dates, destination, budget, lodging)
+- Start with a **one-line goal** summarizing what the group is planning (e.g. "Ski trip to Lake Tahoe", "Dinner for 6 downtown")
+- Then use **bullet points** — one bullet per decided/leaning dimension (e.g. dates, destination, budget, lodging)
 - Only include things **decided or leaning toward agreement** — not what's being discussed (that belongs in next steps)
 - Include both confirmed decisions and strong leanings (note which is which)
 - When something new gets decided, **add a bullet** — don't drop earlier ones. Update existing bullets when details change
