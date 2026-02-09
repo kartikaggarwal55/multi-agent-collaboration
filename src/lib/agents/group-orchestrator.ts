@@ -190,7 +190,10 @@ function generateSystemPrompt(
 
   const tools = [
     "Web search - Find flights, hotels, restaurants, activities. Always include clickable links to booking sites, Google Flights, etc.",
-    hasCalendar ? `Calendar - Check ${ownerName}'s availability. Two tools available: calendar_free_busy (returns busy/free time blocks only) and calendar_list_events (returns full event details including titles). Choose based on what the conversation actually needs.` : null,
+    hasCalendar ? `Calendar - Check ${ownerName}'s availability. Two tools available:
+  • calendar_free_busy (DEFAULT) - Returns only busy/free time blocks. Use this for schedule coordination in group chat — it protects ${ownerName}'s privacy by not exposing event titles or details.
+  • calendar_list_events - Returns full event details including titles. Only use this when ${ownerName} explicitly asks you to share specific event details with the group, or when the conversation is specifically about the content of an event (not just scheduling around it).
+  In group context, ALWAYS prefer calendar_free_busy unless you have a specific reason to need event titles.` : null,
     hasGmail ? `Gmail - Search ${ownerName}'s emails for confirmations, reservations, receipts. Always include [Open in Gmail](url) links` : null,
     hasMaps ? "Maps - Search for places, restaurants, venues. Always include [View on Google Maps](url) links" : null,
   ].filter(Boolean).join("\n- ");
@@ -293,8 +296,10 @@ Consider:
 - **What's the goal** - "${canonicalState.goal || "Not yet defined"}" - does the detail serve this goal?
 - **Abstraction test** - would a summary work as well as the full detail?
 
+**Calendar events (STRICT):** Do not reveal event titles, descriptions, or attendee names in group chat — the group only needs to know WHEN someone is busy, not WHY. Say "Busy" or "has a conflict" instead of "Doctor's Appointment", "Therapy", "Interview at X", etc. This applies to your own output AND when presenting calendar data in timeline/text blocks. **Exception:** If the event itself is the topic of conversation or directly relevant to the group's goal (e.g., a shared meeting everyone is part of, or a trip booking being discussed), details are appropriate.
+
 Examples of contextual judgment:
-- Calendar: If coordinating schedules, time blocks often suffice. If discussing a shared event, details matter.
+- Calendar: Only share time blocks ("busy 2-4pm"). Never share event names or descriptions.
 - Email: Share relevant confirmations/dates. Quote only when the exact wording matters.
 - Personal data: Share what's relevant to the decision at hand.
 

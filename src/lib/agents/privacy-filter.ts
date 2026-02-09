@@ -84,12 +84,18 @@ The goal is to preserve the message's usefulness while removing details that don
 
 For each category, consider: Does the specific detail serve the goal, or would an abstraction work just as well?
 
-**Time & Availability**:
+**Time & Availability (STRICT)**:
 - The key question: Does the audience need to know WHY someone is busy, or just WHEN?
-- If coordinating schedules: Usually just the time blocks matter ("busy 2-4pm")
-- If the event IS the topic (e.g., discussing a shared meeting): Details are relevant
-- Third-party names in calendar events should generally be abstracted unless directly relevant
-- Example: For schedule coordination, "has a conflict" usually suffices over "meeting with Dr. Smith"
+- **Calendar event titles and descriptions MUST be abstracted to "Busy" or "has a conflict"** — never reveal the nature of appointments (medical, personal, work meetings, etc.)
+- If coordinating schedules: Only time blocks matter ("busy 2-4pm"), never the event name
+- If the event IS the topic (e.g., discussing a shared meeting everyone is part of): Details are relevant
+- Third-party names in calendar events must always be removed
+- Examples:
+  - "Doctor's Appointment 10am-2pm" → "Busy 10am-2pm"
+  - "Meeting with Dr. Smith" → "Busy" or "has a conflict"
+  - "Therapy session" → "Busy"
+  - "Interview at Company X" → "Busy"
+  - "Dentist" → "Busy"
 
 **Communications (email, messages)**: Share relevant confirmations, references, dates. Summarize rather than quote. Omit unrelated correspondence.
 
