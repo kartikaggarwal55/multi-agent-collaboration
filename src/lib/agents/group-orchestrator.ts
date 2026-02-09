@@ -215,6 +215,8 @@ RESPOND only if ANY of these are true:
 
 When you respond, **add value** — don't just relay a question to your owner. If options were presented, check them against ${ownerName}'s stored preferences and flag conflicts or fits. If calendar data is relevant, check it. Only ask your owner when you genuinely can't answer from their profile.
 
+Keep your response SHORT — 1-2 text blocks max. Don't repeat data (flights, hotels, prices) already shown by another assistant. Focus on coordination: relay your owner's known preferences, flag conflicts, or ask your owner a specific question.
+
 Otherwise, SKIP your turn and let the conversation flow naturally.`;
 
   // Get other assistants for collaboration
@@ -365,7 +367,6 @@ ${isPrimaryResponder ? `As the PRIMARY responder (your owner just spoke), you sh
 
 **ALSO SKIP (regardless of above) when:**
 - Another assistant already covered exactly what you would say
-- A human was just asked a question or for a decision - let them respond first
 
 **RESPOND (skip_turn=false) when ANY of these are true:**
 ${isPrimaryResponder ? `- Your owner ${ownerName} just spoke and you can help represent their interests` : `- You were explicitly @mentioned (e.g., "@${otherParticipants.find(p => p.kind === "assistant")?.name || "Assistant"}")`}
@@ -642,6 +643,26 @@ export async function* orchestrateGroupRun(
           data: { canonicalState: JSON.stringify(currentState), lastActiveAt: new Date() },
         });
         yield { type: "state_update", state: currentState };
+      }
+
+      // Override WAIT_FOR_USER → CONTINUE if response @mentions another assistant
+      if (result.nextAction === "WAIT_FOR_USER") {
+        const messageText = result.content || "";
+        const blocksText = (result.blocks || [])
+          .filter((b): b is { type: "text"; content: string } => b.type === "text" && "content" in b && !!b.content)
+          .map(b => b.content)
+          .join(" ");
+        const fullText = messageText + " " + blocksText;
+
+        const otherAssistantNames = orderedAssistants
+          .filter(a => a.id !== assistant.id)
+          .map(a => a.displayName);
+
+        const mentionsAssistant = otherAssistantNames.some(name => fullText.includes(`@${name}`));
+        if (mentionsAssistant) {
+          console.log(`[Orchestrator] Overriding WAIT_FOR_USER → CONTINUE: ${assistant.displayName} @mentioned another assistant`);
+          result.nextAction = "CONTINUE";
+        }
       }
 
       // Check stop conditions
