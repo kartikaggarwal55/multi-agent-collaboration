@@ -214,7 +214,7 @@ function TagBadge({ tag }: { tag: string }) {
 function TextBlockComponent({ block, mentions }: { block: { type: "text"; content: string; priority?: string }; mentions: MentionContext }) {
   const isHigh = block.priority === "high";
   return (
-    <div className={isHigh ? "text-[15px] font-medium text-foreground" : "text-[14px] text-foreground/85"}>
+    <div className={isHigh ? "text-[15px] text-foreground" : "text-[14px] text-foreground/85"}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
