@@ -78,10 +78,10 @@ IMPORTANT: Your response has two parts:
             properties: {
               type: {
                 type: "string",
-                enum: ["text", "options", "comparison", "timeline", "accordion", "alert"],
-                description: "text: markdown (default, use for most content). options: list of choices (flights/hotels/places/emails). comparison: side-by-side table. timeline: chronological events (calendar/schedule). accordion: collapsible secondary info. alert: highlighted callout.",
+                enum: ["text", "options", "comparison", "timeline", "accordion"],
+                description: "text: markdown (default, use for most content). options: list of choices (flights/hotels/places/emails). comparison: side-by-side table. timeline: chronological events (calendar/schedule). accordion: collapsible secondary info.",
               },
-              content: { type: "string", description: "Markdown text (for text, accordion, alert blocks)" },
+              content: { type: "string", description: "Markdown text (for text, accordion blocks)" },
               priority: { type: "string", enum: ["high", "normal"], description: "For text blocks: 'high' = lead summary with emphasis" },
               label: { type: "string", description: "Section heading for options/comparison/timeline/accordion" },
               columns: {
@@ -110,7 +110,6 @@ IMPORTANT: Your response has two parts:
               recommended: { type: "integer", description: "0-based index of recommended item" },
               layout: { type: "string", enum: ["cards", "list"] },
               defaultOpen: { type: "boolean", description: "For accordion: start expanded (default false)" },
-              style: { type: "string", enum: ["info", "warning", "success", "error"], description: "For alert blocks" },
             },
             required: ["type"],
           },
@@ -393,19 +392,12 @@ Your response is a sequence of **blocks**. Each block renders as a specific UI c
 - \`options\` — Search results with 2+ items: flights, hotels, restaurants, emails. Each item must have a title and structured fields. Include links.
 - \`comparison\` — Comparing 2-4 specific options side by side across multiple dimensions. Only when explicitly comparing.
 - \`timeline\` — Calendar availability, schedules, itineraries. Each item has a time/day and status.
-- \`accordion\` — Use generously for anything that's useful but secondary: full email body, all reviews, hotel amenities/details, search methodology, trip summaries/recaps, booking details, policy info, itinerary breakdowns. When in doubt about whether info is primary or secondary, put it in an accordion. The user can expand it if they want it.
-- \`alert\` — Conflicts, warnings, important callouts. Use sparingly (1 per message max).
-
-### Examples:
-
-**Flight search →** text lead + options block:
-blocks: [text(high): "Found 3 flights to LA, cheapest is Southwest at $180.", options: flights with price/time/link, text: "@${ownerName} — which works?"]
-
-**Calendar check →** text lead + alert + timeline:
-blocks: [text(high): "${ownerName} is free Jan 15-16 but has a conflict on the 17th.", alert(warning): conflict details, timeline: day-by-day availability]
-
-**Simple coordination →** just text blocks:
-blocks: [text(high): "@OtherAssistant — my owner prefers budget options. What's your owner's preference?"]
+- \`accordion\` — Collapsible secondary/supplementary info: full email body, booking policies, cancellation terms, raw reviews, detailed amenity breakdowns, methodology notes, fine print, etc. Don't restate data already shown in an options/comparison block. When in doubt about whether info is primary or secondary, put it in an accordion. The user can expand it if they want it.
+### Examples (adapt block count and types to the situation):
+- Search results → text(high) lead + options or comparison for structured data
+- Calendar check → text(high) summary + timeline for availability
+- Coordination → text(high) with @mentions
+- Supplementary detail → accordion (only for info not already in other blocks)
 
 ### Rules:
 - NEVER dump raw tool output into a text block. Use options/comparison/timeline for structured data.
