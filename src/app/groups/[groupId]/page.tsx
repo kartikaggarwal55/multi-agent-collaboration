@@ -255,7 +255,7 @@ function OptionsBlockComponent({ block }: { block: { type: "options"; label: str
 
   return (
     <div className="mt-1">
-      <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{block.label}</div>
+      <div className="text-[13px] font-semibold text-foreground/70 uppercase tracking-wider mb-1.5">{block.label}</div>
       <div className="space-y-1.5">
         {displayItems.map((item, i) => {
           const isRecommended = block.recommended === i;
