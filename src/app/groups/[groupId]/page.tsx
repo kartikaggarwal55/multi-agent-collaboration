@@ -149,7 +149,7 @@ const PencilIcon = () => (
 );
 
 const ExternalLinkIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
     <polyline points="15 3 21 3 21 9" />
     <line x1="10" y1="14" x2="21" y2="3" />
@@ -174,29 +174,12 @@ function getStatusColor(tag?: string, status?: string): string {
   return "bg-muted-foreground/40";
 }
 
-function getAlertStyles(style: string) {
-  switch (style) {
-    case "warning": return "border-amber-500/50 bg-amber-500/10 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300";
-    case "error": return "border-red-500/50 bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-300";
-    case "success": return "border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300";
-    default: return "border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300";
-  }
-}
 
 function getTagStyle(tag: string): { dot: string; bg: string; text: string } {
   const val = tag.toLowerCase();
-  // Highlight tags — orange, stand out
+  // Highlight tags — primary accent
   if (val.includes("recommend") || val.includes("top") || val.includes("best") || val.includes("pick") || val.includes("favorite") || val.includes("popular"))
     return { dot: "bg-primary", bg: "bg-primary/15 dark:bg-primary/20", text: "text-primary" };
-  // Positive status tags — green
-  if (val.includes("free") || val.includes("available") || val.includes("open") || val.includes("confirmed") || val.includes("success"))
-    return { dot: "bg-emerald-500", bg: "bg-emerald-500/15 dark:bg-emerald-500/20", text: "text-emerald-700 dark:text-emerald-300" };
-  // Negative status tags — red
-  if (val.includes("busy") || val.includes("conflict") || val.includes("error") || val.includes("closed"))
-    return { dot: "bg-red-400", bg: "bg-red-500/15 dark:bg-red-500/20", text: "text-red-700 dark:text-red-300" };
-  // Warning tags — amber
-  if (val.includes("partial") || val.includes("warning") || val.includes("tentative"))
-    return { dot: "bg-amber-400", bg: "bg-amber-500/15 dark:bg-amber-500/20", text: "text-amber-700 dark:text-amber-300" };
   // Default — muted
   return { dot: "bg-muted-foreground/40", bg: "bg-muted/60", text: "text-muted-foreground" };
 }
@@ -263,7 +246,7 @@ function OptionsBlockComponent({ block }: { block: { type: "options"; label: str
             <div
               key={i}
               className={`flex items-start gap-3 p-2.5 rounded-lg border transition-colors ${
-                isRecommended ? "border-primary/40 bg-primary/8 dark:bg-primary/10" : "border-border/50 dark:border-white/30 bg-muted/50 dark:bg-muted/80 hover:bg-muted/70 dark:hover:bg-muted/90"
+                isRecommended ? "border-primary/40 bg-primary/8" : "border-white/12 bg-muted/50 hover:bg-muted/70"
               }`}
             >
               <div className="flex-1 min-w-0">
@@ -320,7 +303,7 @@ function ComparisonBlockComponent({ block }: { block: { type: "comparison"; labe
 
   return (
     <div className="mt-1">
-      <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{block.label}</div>
+      <div className="text-[13px] font-semibold text-foreground/70 uppercase tracking-wider mb-1.5">{block.label}</div>
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] border-collapse">
           <thead>
@@ -368,7 +351,7 @@ function TimelineBlockComponent({ block }: { block: { type: "timeline"; label: s
   const items = block.items || [];
   return (
     <div className="mt-1">
-      <div className="text-[12px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">{block.label}</div>
+      <div className="text-[13px] font-semibold text-foreground/70 uppercase tracking-wider mb-1.5">{block.label}</div>
       <div className="space-y-0.5">
         {items.map((item, i) => (
           <div key={i} className="flex items-start gap-2.5 py-1.5">
@@ -398,7 +381,7 @@ function TimelineBlockComponent({ block }: { block: { type: "timeline"; label: s
 function AccordionBlockComponent({ block, mentions }: { block: { type: "accordion"; label: string; content: string; defaultOpen?: boolean }; mentions: MentionContext }) {
   const [open, setOpen] = useState(block.defaultOpen || false);
   return (
-    <div className="mt-1 border border-border/60 dark:border-white/30 rounded-lg overflow-hidden bg-muted/30 dark:bg-muted/80">
+    <div className="mt-1 border border-white/12 rounded-lg overflow-hidden bg-muted/50">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-3 py-2.5 text-[13px] font-medium text-foreground/80 hover:bg-muted/50 transition-colors"
@@ -415,7 +398,7 @@ function AccordionBlockComponent({ block, mentions }: { block: { type: "accordio
         <ChevronIcon expanded={open} />
       </button>
       {open && (
-        <div className="px-3 py-2 border-t border-border/50 dark:border-white/25 text-[13px] text-foreground/75">
+        <div className="px-3 py-2 border-t border-white/12 text-[13px] text-foreground/75">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -435,21 +418,6 @@ function AccordionBlockComponent({ block, mentions }: { block: { type: "accordio
   );
 }
 
-function AlertBlockComponent({ block, mentions }: { block: { type: "alert"; style: string; content: string }; mentions: MentionContext }) {
-  return (
-    <div className={`mt-1 px-3 py-2 rounded-lg border-l-2 text-[13px] ${getAlertStyles(block.style)}`}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          p: ({ children }) => <p className="mb-0 leading-relaxed">{renderMentionsInChildren(children, mentions.currentUserName, mentions.participants)}</p>,
-          strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-        }}
-      >
-        {block.content}
-      </ReactMarkdown>
-    </div>
-  );
-}
 
 function BlockRenderer({ block, mentions }: { block: MessageBlock; mentions: MentionContext }) {
   switch (block.type) {
@@ -458,7 +426,6 @@ function BlockRenderer({ block, mentions }: { block: MessageBlock; mentions: Men
     case "comparison": return <ComparisonBlockComponent block={block} />;
     case "timeline": return <TimelineBlockComponent block={block} />;
     case "accordion": return <AccordionBlockComponent block={block} mentions={mentions} />;
-    case "alert": return <AlertBlockComponent block={block} mentions={mentions} />;
     default: return null;
   }
 }
