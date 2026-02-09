@@ -263,7 +263,7 @@ function OptionsBlockComponent({ block }: { block: { type: "options"; label: str
             <div
               key={i}
               className={`flex items-start gap-3 p-2.5 rounded-lg border transition-colors ${
-                isRecommended ? "border-primary/40 bg-primary/8 dark:bg-primary/10" : "border-border/50 dark:border-border/80 bg-muted/50 dark:bg-muted/80 hover:bg-muted/70 dark:hover:bg-muted/90"
+                isRecommended ? "border-primary/40 bg-primary/8 dark:bg-primary/10" : "border-border/50 dark:border-white/30 bg-muted/50 dark:bg-muted/80 hover:bg-muted/70 dark:hover:bg-muted/90"
               }`}
             >
               <div className="flex-1 min-w-0">
@@ -338,7 +338,7 @@ function ComparisonBlockComponent({ block }: { block: { type: "comparison"; labe
               const isRecommended = block.recommended === i;
               return (
                 <tr key={i} className={isRecommended ? "bg-primary/5 dark:bg-primary/10" : "hover:bg-muted/30 dark:hover:bg-muted/50"}>
-                  <td className="px-2.5 py-2 font-medium text-foreground border-b border-border/30 dark:border-border/50">
+                  <td className="px-2.5 py-2 font-medium text-foreground border-b border-border/30 dark:border-white/25">
                     <div className="flex items-center gap-2">
                       {item.title}
                       {item.tag && <TagBadge tag={item.tag} />}
@@ -350,7 +350,7 @@ function ComparisonBlockComponent({ block }: { block: { type: "comparison"; labe
                     </div>
                   </td>
                   {columns.map((col) => (
-                    <td key={col} className="px-2.5 py-2 text-foreground/75 border-b border-border/30 dark:border-border/50">
+                    <td key={col} className="px-2.5 py-2 text-foreground/75 border-b border-border/30 dark:border-white/25">
                       {item.fields?.[col] || "—"}
                     </td>
                   ))}
@@ -398,7 +398,7 @@ function TimelineBlockComponent({ block }: { block: { type: "timeline"; label: s
 function AccordionBlockComponent({ block, mentions }: { block: { type: "accordion"; label: string; content: string; defaultOpen?: boolean }; mentions: MentionContext }) {
   const [open, setOpen] = useState(block.defaultOpen || false);
   return (
-    <div className="mt-1 border border-border/60 dark:border-border/80 rounded-lg overflow-hidden bg-muted/30 dark:bg-muted/80">
+    <div className="mt-1 border border-border/60 dark:border-white/30 rounded-lg overflow-hidden bg-muted/30 dark:bg-muted/80">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-3 py-2.5 text-[13px] font-medium text-foreground/80 hover:bg-muted/50 transition-colors"
@@ -415,7 +415,7 @@ function AccordionBlockComponent({ block, mentions }: { block: { type: "accordio
         <ChevronIcon expanded={open} />
       </button>
       {open && (
-        <div className="px-3 py-2 border-t border-border/50 text-[13px] text-foreground/75">
+        <div className="px-3 py-2 border-t border-border/50 dark:border-white/25 text-[13px] text-foreground/75">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -1483,9 +1483,16 @@ function StatePanel({
       {canonicalState.leadingOption && (
         <div>
           <SectionHeader accent>Current Plan</SectionHeader>
-          <p className="text-[14px] leading-[1.6] text-foreground font-medium">
-            {canonicalState.leadingOption}
-          </p>
+          <ul className="text-[14px] leading-[1.6] text-foreground space-y-1 list-disc pl-4">
+            {canonicalState.leadingOption.split("\n").filter(l => l.trim()).map((line, i) => {
+              const clean = line.replace(/^[-•]\s*/, "").replace(/\*\*(.+?)\*\*/g, "$1");
+              const colonIdx = clean.indexOf(":");
+              if (colonIdx > 0 && colonIdx < 30) {
+                return <li key={i}><span className="font-medium">{clean.slice(0, colonIdx + 1)}</span>{clean.slice(colonIdx + 1)}</li>;
+              }
+              return <li key={i}>{clean}</li>;
+            })}
+          </ul>
         </div>
       )}
 

@@ -214,6 +214,8 @@ RESPOND only if ANY of these are true:
 2. Another assistant asked YOU specifically a question
 3. You have relevant information about ${ownerName} (calendar conflicts, preferences, constraints) that would meaningfully change the plan
 
+When you respond, **add value** — don't just relay a question to your owner. If options were presented, check them against ${ownerName}'s stored preferences and flag conflicts or fits. If calendar data is relevant, check it. Only ask your owner when you genuinely can't answer from their profile.
+
 Otherwise, SKIP your turn and let the conversation flow naturally.`;
 
   // Get other assistants for collaboration
@@ -303,19 +305,35 @@ Examples of contextual judgment:
 - Email: Share relevant confirmations/dates. Quote only when the exact wording matters.
 - Personal data: Share what's relevant to the decision at hand.
 
-## Be Proactive
-When the conversation needs information (flights, hotels, places, availability):
-1. USE your tools to search - don't just say "I'll look into it"
-2. INCLUDE the results in your message with actionable links
-3. Present OPTIONS with prices, times, and booking links
-4. If another assistant asked you something, RESEARCH and RESPOND with findings
+## Lead With Options, Not Questions (CRITICAL)
+
+**Never ask for preferences in a vacuum.** Every message to the group should bring new information — search results, calendar data, concrete options. Don't ask "what's your budget?" or "cabin or hotel?" without also presenting something to react to.
+
+**The core principle:** People make better decisions when they're reacting to concrete options, not answering abstract questions. Use what you already know (your owner's profile, stored preferences, the conversation so far) to search, then present options and let people respond.
+
+**Good flow for shared decisions:**
+1. **SEARCH FIRST** - Use your owner's known preferences + any constraints from the conversation to search for options right away
+2. **PRESENT OPTIONS** - Show concrete results (with prices, links, details) that work for your owner's preferences
+3. **INVITE INPUT** - Ask the group to react: "Here are some options based on what we know so far — what stands out?" and @mention other assistants so they can flag conflicts with their owner's preferences
+4. **REFINE** - If other participants have different constraints, narrow or re-search based on the overlap
+
+**Good patterns:**
+- ✅ Owner says "let's find lodging" → Search using known preferences → Present 3-4 options with prices → "@OtherAssistant — do any of these work for your owner? Flag any constraints"
+- ✅ Other assistant flags "my owner's budget is under $150/night" → Filter or re-search → Present updated options that fit both
+
+**Bad patterns:**
+- ❌ "Before I search, what are everyone's preferences for lodging?" (empty question — no value to the group)
+- ❌ Asking abstract preference questions when you could just search and present (you already have profile data)
+- ❌ Multi-round preference gathering before showing a single option
+
+**When you genuinely don't have enough to search on:** Pair the question with whatever partial information you do have. Share your owner's known preferences, surface any stored constraints, then ask the specific missing piece.
 
 ## Decision Discipline (CRITICAL)
 
 **Never assume implicit confirmation.** Options must be explicitly confirmed before building on them.
 
 Decision states:
-- **Proposed**: Options mentioned, no confirmation requested yet
+- **Proposed**: Options presented, no confirmation requested yet
 - **Awaiting confirmation**: User was asked to decide, waiting for response
 - **Confirmed**: User explicitly stated their choice
 
@@ -325,40 +343,16 @@ Decision states:
 3. Before discussing details that depend on a choice, verify the parent choice is confirmed
 4. When a decision is still pending, surface it clearly before moving forward
 
-**Shared decisions** (lodging, destination, group activities, dining - things that affect everyone):
-
-These require coordination BEFORE presenting options to owners:
-
-1. **GATHER** - When your owner mentions a preference (e.g., "cheap lodging"), note it but don't immediately search and present options
-2. **COORDINATE** - Ask other assistants: "@OtherAssistant - my owner prefers budget options. What are your owner's preferences for lodging?"
-3. **FIND OVERLAP** - Once you know everyone's preferences, search for options that satisfy all of them
-4. **PROPOSE TOGETHER** - Present options that work for everyone, not just your owner
-5. **CONFIRM FROM ALL** - Each owner must confirm separately before finalizing
-
-Your owner saying "yes" to an option is their PREFERENCE, not a group decision. Don't announce "Confirmed!" until all affected parties agree.
-
-Wrong patterns:
-- ❌ Owner says "cheap lodging" → You search, find options, ask owner to pick → Owner picks → You announce "Confirmed! @OtherAssistant does this work?" (fait accompli)
-- ❌ "ilisha chose Econo Lodge!" (presenting one person's choice as the decision)
-
-Right patterns:
-- ✅ Owner says "cheap lodging" → "@OtherAssistant - my owner prefers budget ~$60/night. What's your owner's preference?" → Coordinate → Present shared options
-- ✅ "ilisha prefers budget options. @Kartik's Assistant - what's Kartik's lodging preference so we can find something that works for both?"
+**Shared decisions — confirmation requires everyone:**
+- Your owner saying "yes" to an option is their PREFERENCE, not a group decision
+- Don't announce "Confirmed!" until all affected parties agree
+- Each owner must confirm separately before finalizing
+- Don't present one person's choice as the group decision
 
 **Confirmation tracking:**
 - Your owner's confirmation applies ONLY to them
 - Only mark "confirmed for all" when each assistant has confirmed their user's agreement
 - Use pending_decisions with confirmationsNeeded/confirmationsReceived to track
-
-**Example - single user:**
-- Asked: "Option A or Option B? And which date?"
-- User replied: "Option A"
-- Option is CONFIRMED, but date is STILL PENDING
-
-**Example - multi-user:**
-- Asked everyone: "Does the proposed plan work?"
-- Your owner replied: "Yes"
-- Your owner is CONFIRMED, but other users are STILL PENDING until their assistants confirm
 
 Track decisions in state_patch.pending_decisions and update their status as the conversation progresses.
 
@@ -428,11 +422,11 @@ blocks: [text(high): "@OtherAssistant — my owner prefers budget options. What'
 The \`leading_option\` field in state_patch is the most important piece of state — it's the first thing a user sees in the side panel. Treat it as a **rolling snapshot** of everything decided or leaning toward so far.
 
 **How to write it:**
-- Only include things that have been **decided or are leaning toward agreement** — not what's currently being discussed or searched for (that belongs in next steps)
-- Combine all aligned-upon and partially-aligned items into one concise summary
+- Use **bullet points** — one bullet per decided/leaning dimension (e.g. dates, destination, budget, lodging)
+- Only include things **decided or leaning toward agreement** — not what's being discussed (that belongs in next steps)
 - Include both confirmed decisions and strong leanings (note which is which)
-- When something new gets decided, **add it to the existing summary** — don't replace the whole thing with just the latest topic
-- Keep it concise but complete — 1-3 sentences covering all settled dimensions
+- When something new gets decided, **add a bullet** — don't drop earlier ones. Update existing bullets when details change
+- Keep each bullet short and scannable (a few words, not a sentence)
 
 **When to update:**
 - When a decision is made or a clear leaning emerges — not just because discussion happened
@@ -454,7 +448,10 @@ function formatConversation(messages: GroupMessageData[], assistantName: string)
     return "This is the start of the conversation.";
   }
 
-  const formatted = messages.slice(-20).map(m => `**${m.authorName}**: ${m.content}`).join("\n\n");
+  const formatted = messages.slice(-20).map(m => {
+    const roleTag = m.role === "user" ? "[human]" : "[assistant]";
+    return `${roleTag} **${m.authorName}**: ${m.content}`;
+  }).join("\n\n");
   return `Recent conversation:\n\n${formatted}\n\nNow respond as ${assistantName}.`;
 }
 
@@ -514,13 +511,23 @@ export async function* orchestrateGroupRun(
   while (round < MAX_ROUNDS) {
     round++;
     let continueCollaboration = false;
+    let roundPostedCount = 0;
 
     for (let i = 0; i < orderedAssistants.length; i++) {
     const assistant = orderedAssistants[i];
-    const isPrimary = i === 0 && !!ownerAssistant;
+    const isPrimary = round === 1 && i === 0 && !!ownerAssistant;
     const owner = humans.find(h => h.id === assistant.ownerHumanId);
 
     if (!owner) continue;
+
+    // No-new-context guard: skip if no new messages since this assistant's last post
+    if (round > 1) {
+      const lastPostIdx = messages.findLastIndex(m => m.authorId === assistant.id);
+      if (lastPostIdx >= 0 && lastPostIdx >= messages.length - 1) {
+        console.log(`[Orchestrator] ${assistant.displayName}: skipping round ${round}, no new messages since last post`);
+        continue;
+      }
+    }
 
     // Emit thinking status for this assistant
     yield {
@@ -610,6 +617,7 @@ export async function* orchestrateGroupRun(
         messages.push({ ...messageData, details: undefined });
         yield { type: "message", message: messageData };
         anyPosted = true;
+        roundPostedCount++;
         console.log(`[Orchestrator] ${assistant.displayName} posted, next_action: ${result.nextAction}`);
       }
 
@@ -677,6 +685,11 @@ export async function* orchestrateGroupRun(
       yield { type: "error", error: `${assistant.displayName} encountered an error: ${errorMsg}` };
     }
     } // end for loop
+
+    // No-op round breaker: if no messages were posted this round, stop
+    if (roundPostedCount === 0) {
+      break;
+    }
 
     // If no assistant wants to continue collaboration, stop
     if (!continueCollaboration) {
@@ -948,7 +961,15 @@ async function callAssistant(
   return {
     skipped,
     content: stripCiteTags(finalContent),
-    blocks: emitTurnResult?.blocks || null,
+    blocks: emitTurnResult?.blocks?.map(b => {
+      const cleaned = { ...b };
+      for (const key of Object.keys(cleaned) as (keyof typeof cleaned)[]) {
+        if (typeof cleaned[key] === "string") {
+          (cleaned as Record<string, unknown>)[key] = stripCiteTags(cleaned[key] as string);
+        }
+      }
+      return cleaned;
+    }) || null,
     citations: allCitations,
     statePatch: emitTurnResult?.state_patch || null,
     nextAction: emitTurnResult?.next_action || "WAIT_FOR_USER",
