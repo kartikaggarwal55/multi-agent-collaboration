@@ -131,7 +131,7 @@ Otherwise, if waiting on human input → WAIT_FOR_USER`,
         state_patch: {
           type: "object",
           properties: {
-            leading_option: { type: "string" },
+            leading_option: { type: "string", description: "Rolling snapshot of what the group has aligned on or is leaning toward. Only include decisions made or strong leanings — not what's currently being discussed (that's in next steps). Include partial alignments. Carry forward earlier alignments when adding new ones." },
             status_summary: { type: "array", items: { type: "string" } },
             add_constraints: {
               type: "array",
@@ -239,7 +239,7 @@ Note: Profile data helps you understand preferences, but does NOT authorize you 
 Note: For date calculations (day of week, upcoming weekends), use the date tools rather than calculating yourself.
 
 ## Current Plan State
-- Leading option: ${canonicalState.leadingOption || "None"}
+- Current plan (what's aligned so far): ${canonicalState.leadingOption || "Nothing yet — set this as soon as any direction emerges"}
 - Stage: ${canonicalState.stage}
 - Constraints:
 ${constraints}
@@ -423,7 +423,22 @@ blocks: [text(high): "@OtherAssistant — my owner prefers budget options. What'
 - Do NOT produce summaries or recaps of the conversation/trip/plan as text blocks. If a summary is genuinely useful, put it in an accordion. The user can see the conversation history — don't repeat it.
 - Prefer accordions over text blocks for anything beyond the core decision point. Details, amenities, terms, full content — all accordion.
 
-Update state_patch with new constraints, leading options, etc.
+## Current Plan / Leading Option (CRITICAL)
+
+The \`leading_option\` field in state_patch is the most important piece of state — it's the first thing a user sees in the side panel. Treat it as a **rolling snapshot** of everything decided or leaning toward so far.
+
+**How to write it:**
+- Only include things that have been **decided or are leaning toward agreement** — not what's currently being discussed or searched for (that belongs in next steps)
+- Combine all aligned-upon and partially-aligned items into one concise summary
+- Include both confirmed decisions and strong leanings (note which is which)
+- When something new gets decided, **add it to the existing summary** — don't replace the whole thing with just the latest topic
+- Keep it concise but complete — 1-3 sentences covering all settled dimensions
+
+**When to update:**
+- When a decision is made or a clear leaning emerges — not just because discussion happened
+- Even when only one aspect moves forward — carry the rest of the aligned items forward unchanged
+
+**Common mistake:** Writing only about the latest topic discussed and dropping earlier alignments. If the group agreed on a date three messages ago and is now discussing venue, the leading option must still include the date.
 
 ## Next Steps (Important)
 Keep suggested_next_steps as a short list (3-5 items) of concise pending decisions.
@@ -898,17 +913,20 @@ async function callAssistant(
     }
   }
 
-  // Determine final content
-  let finalContent = emitTurnResult?.public_message || "";
-
-  // If no public_message but we have blocks, derive content from text blocks
-  if (!finalContent && emitTurnResult?.blocks?.length) {
+  // Build final content from text blocks (the full message), with public_message as fallback.
+  // Text blocks contain the complete message including @mentions and questions — using them
+  // as conversation context ensures other assistants can see @mentions and respond accordingly.
+  let finalContent = "";
+  if (emitTurnResult?.blocks?.length) {
     const textBlocks = emitTurnResult.blocks.filter(
       (b): b is { type: "text"; content: string } => b.type === "text" && !!b.content
     );
     if (textBlocks.length > 0) {
       finalContent = textBlocks.map(b => b.content).join(" ");
     }
+  }
+  if (!finalContent) {
+    finalContent = emitTurnResult?.public_message || "";
   }
 
   // If still no content but we have text (from searches), use that

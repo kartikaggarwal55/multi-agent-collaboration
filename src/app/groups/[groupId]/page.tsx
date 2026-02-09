@@ -1365,9 +1365,9 @@ function NextStepsSection({
           {completedSteps.map((step, i) => (
             <div
               key={`completed-${i}`}
-              className="flex items-start gap-2 text-[15px] leading-[1.5]"
+              className="flex items-start gap-2 text-[14px] leading-[1.5]"
             >
-              <span className="text-foreground/30 text-[14px] w-4 text-right shrink-0 tabular-nums">
+              <span className="text-foreground/30 text-[13px] w-4 text-right shrink-0 tabular-nums">
                 {i + 1}.
               </span>
               <span className="text-foreground/40 line-through">{step}</span>
@@ -1382,9 +1382,9 @@ function NextStepsSection({
             {openSteps.map((step, i) => (
               <div
                 key={`open-${i}`}
-                className="flex items-start gap-2 text-[15px] leading-[1.5] py-0.5"
+                className="flex items-start gap-2 text-[14px] leading-[1.5] py-0.5"
               >
-                <span className="text-foreground/50 text-[14px] w-4 text-right shrink-0 tabular-nums">
+                <span className="text-foreground/50 text-[13px] w-4 text-right shrink-0 tabular-nums">
                   {totalCompleted + i + 1}.
                 </span>
                 <span className="text-foreground/90">{step}</span>
@@ -1483,7 +1483,7 @@ function StatePanel({
       {canonicalState.leadingOption && (
         <div>
           <SectionHeader accent>Current Plan</SectionHeader>
-          <p className="text-[15px] leading-[1.6] text-foreground font-medium">
+          <p className="text-[14px] leading-[1.6] text-foreground font-medium">
             {canonicalState.leadingOption}
           </p>
         </div>
@@ -1551,7 +1551,7 @@ function StatePanel({
                       {constraints.map((c, i) => {
                         const constraintText = c.constraint.replace(/^[-–—•]\s*/, '').trim();
                         return (
-                          <div key={i} className="text-[15px] text-foreground/60 leading-[1.6]">
+                          <div key={i} className="text-[12px] text-foreground/60 leading-[1.6]">
                             {constraintText}
                           </div>
                         );
