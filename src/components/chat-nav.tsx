@@ -29,6 +29,7 @@ export function ChatNav() {
     <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg border border-border/50">
       <Link
         href="/groups"
+        title="Group rooms — where you and others (with assistants) coordinate"
         className={`flex items-center gap-2 h-8 px-4 rounded-md text-sm font-medium transition-all duration-200 cursor-pointer ${
           isGroups
             ? "bg-card text-foreground shadow-sm border border-border/50"
@@ -40,6 +41,7 @@ export function ChatNav() {
       </Link>
       <Link
         href="/me/assistant"
+        title="Personal chat — just you and your assistant. Teach it about yourself here."
         className={`flex items-center gap-2 h-8 px-4 rounded-md text-sm font-medium transition-all duration-200 cursor-pointer ${
           isPersonal
             ? "bg-card text-foreground shadow-sm border border-border/50"
