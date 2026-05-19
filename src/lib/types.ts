@@ -78,19 +78,12 @@ export interface AccordionBlock {
   defaultOpen?: boolean;
 }
 
-export interface AlertBlock {
-  type: "alert";
-  style: "info" | "warning" | "success" | "error";
-  content: string;
-}
-
 export type MessageBlock =
   | TextBlock
   | OptionsBlock
   | ComparisonBlock
   | TimelineBlock
-  | AccordionBlock
-  | AlertBlock;
+  | AccordionBlock;
 
 export interface Message {
   id: string;
