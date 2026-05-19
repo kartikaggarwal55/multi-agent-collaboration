@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
@@ -16,12 +16,6 @@ interface WelcomeFlowProps {
 const ArrowRightIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M5 12h14M12 5l7 7-7 7" />
-  </svg>
-);
-
-const XIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M18 6 6 18M6 6l12 12" />
   </svg>
 );
 
@@ -348,22 +342,32 @@ export function WelcomeFlow({
     </div>
   );
 
+  // Close on Escape when the guide is shown as an overlay
+  useEffect(() => {
+    if (variant !== "overlay") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onDismiss();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [variant, onDismiss]);
+
   if (variant === "overlay") {
     return (
       <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-md overflow-y-auto">
+        {/* Fixed-to-viewport close button — always reachable while scrolling */}
+        <button
+          onClick={onDismiss}
+          aria-label="Close guide (Esc)"
+          title="Close guide (Esc)"
+          className="fixed top-4 right-4 z-[60] w-12 h-12 flex items-center justify-center rounded-full bg-card/90 backdrop-blur-md border border-border hover:border-primary/40 hover:bg-card text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-lg shadow-black/30"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
         <div className="min-h-screen px-6 py-12">
-          <div className="max-w-3xl mx-auto relative">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onDismiss}
-              className="absolute -top-2 right-0 text-muted-foreground hover:text-foreground"
-              aria-label="Close guide"
-            >
-              <XIcon />
-            </Button>
-            {content}
-          </div>
+          <div className="max-w-3xl mx-auto">{content}</div>
         </div>
       </div>
     );
