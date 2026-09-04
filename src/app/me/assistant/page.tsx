@@ -815,7 +815,7 @@ function MessageBubble({
                 ? isVoiceMessage
                   ? "bg-[oklch(0.65_0.15_55/0.6)] text-white/90 shadow-sm border border-[oklch(0.65_0.15_55/0.4)]"
                   : "bg-[oklch(0.65_0.15_55)] text-white shadow-sm border border-[oklch(0.65_0.15_55)]"
-                : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
+                : "message-ai shadow-sm backdrop-blur-sm"
             }`}
           >
             {isUser ? (
