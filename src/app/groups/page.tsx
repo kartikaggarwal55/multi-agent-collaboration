@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ChatNav } from "@/components/chat-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { WelcomeFlow, HelpFab } from "@/components/welcome-flow";
+import { WelcomeFlow } from "@/components/welcome-flow";
 
 const LogOutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -88,53 +88,54 @@ export default function GroupsPage() {
   const [joinCode, setJoinCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showWelcome, setShowWelcome] = useState(false);
-  const [welcomeReady, setWelcomeReady] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/signin");
-    } else if (status === "authenticated") {
-      fetchGroups();
+      return;
     }
-  }, [status, router]);
 
-  // Decide whether to show the welcome flow on first visit.
-  // The empty state always shows it inline; the overlay only opens via the FAB.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const dismissed = window.localStorage.getItem("welcome:groups");
-    if (!dismissed) setShowWelcome(true);
-    setWelcomeReady(true);
-  }, []);
+    if (status === "authenticated") {
+      const fetchGroups = async () => {
+        try {
+          const response = await fetch("/api/groups");
+          if (!response.ok) throw new Error("Failed to fetch groups");
+          const data = await response.json();
+          setGroups(data.groups || []);
 
-  const dismissWelcome = () => {
-    setShowWelcome(false);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("welcome:groups", String(Date.now()));
+          const userId = session?.user?.id;
+          if (data.showWelcome && userId) {
+            const welcomeKey = `welcome:groups:${userId}`;
+            let alreadyShown = false;
+
+            try {
+              alreadyShown = window.localStorage.getItem(welcomeKey) === "1";
+              if (!alreadyShown) window.localStorage.setItem(welcomeKey, "1");
+            } catch {
+              // Storage can be unavailable in privacy-focused browser modes.
+            }
+
+            if (!alreadyShown) setShowWelcome(true);
+          }
+        } catch (err) {
+          console.error("Error fetching groups:", err);
+          setError("Failed to load groups");
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      void fetchGroups();
     }
-  };
+  }, [router, session?.user?.id, status]);
 
-  const openWelcomeOverlay = () => setShowWelcome(true);
+  const dismissWelcome = () => setShowWelcome(false);
 
   const focusJoinInput = () => {
     const el = document.getElementById("join-link-input");
     if (el) {
       (el as HTMLInputElement).focus();
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  };
-
-  const fetchGroups = async () => {
-    try {
-      const response = await fetch("/api/groups");
-      if (!response.ok) throw new Error("Failed to fetch groups");
-      const data = await response.json();
-      setGroups(data.groups || []);
-    } catch (err) {
-      console.error("Error fetching groups:", err);
-      setError("Failed to load groups");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -221,9 +222,9 @@ export default function GroupsPage() {
               <UsersIcon />
             </div>
             <div>
-              <h1 className="font-serif text-3xl tracking-tight leading-none">Groups</h1>
-              <p className="text-xs text-muted-foreground italic font-serif mt-1">
-                Where assistants meet, on your behalf
+              <h1 className="text-2xl font-semibold tracking-tight">Groups</h1>
+              <p className="text-sm text-muted-foreground">
+                Collaborate with AI assistants
               </p>
             </div>
           </div>
@@ -279,51 +280,41 @@ export default function GroupsPage() {
           </div>
         )}
 
+        {showWelcome && (
+          <div className="mb-8">
+            <WelcomeFlow
+              userFirstName={session.user?.name?.split(" ")[0]}
+              onCreateGroup={() => {
+                dismissWelcome();
+                setShowCreateModal(true);
+              }}
+              onJoinWithLink={() => {
+                dismissWelcome();
+                focusJoinInput();
+              }}
+              onDismiss={dismissWelcome}
+            />
+          </div>
+        )}
+
         {/* Groups List */}
         <div className="space-y-3">
           {groups.length === 0 ? (
-            welcomeReady && showWelcome ? (
-              <div className="py-4">
-                <WelcomeFlow
-                  hasGroups={false}
-                  userFirstName={session.user?.name?.split(" ")[0]}
-                  onCreateGroup={() => {
-                    dismissWelcome();
-                    setShowCreateModal(true);
-                  }}
-                  onJoinWithLink={() => {
-                    dismissWelcome();
-                    focusJoinInput();
-                  }}
-                  onDismiss={dismissWelcome}
-                  variant="inline"
-                />
+            <div className="text-center py-16">
+              <div className="w-16 h-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                <SparklesIcon />
               </div>
-            ) : (
-              <div className="relative text-center py-20 rounded-2xl border border-dashed border-border/60 bg-card/20">
-                <div className="empty-state-glow absolute inset-0 pointer-events-none" />
-                <div className="relative">
-                  <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-5 text-primary">
-                    <SparklesIcon />
-                  </div>
-                  <p className="font-serif text-xl tracking-tight mb-1">
-                    Quiet in here.
-                  </p>
-                  <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-                    Start a room and share the link — anyone who joins gets their own assistant.
-                  </p>
-                  <div className="flex items-center justify-center gap-2">
-                    <Button onClick={() => setShowCreateModal(true)}>
-                      <PlusIcon />
-                      <span className="ml-2">Create a group</span>
-                    </Button>
-                    <Button variant="ghost" onClick={openWelcomeOverlay}>
-                      How does this work?
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )
+              <p className="text-muted-foreground text-sm mb-4">
+                No groups yet. Create one to start collaborating!
+              </p>
+              <Button
+                onClick={() => setShowCreateModal(true)}
+                variant="secondary"
+              >
+                <PlusIcon />
+                <span className="ml-2">Create Your First Group</span>
+              </Button>
+            </div>
           ) : (
             groups.map((group) => (
               <div
@@ -375,27 +366,6 @@ export default function GroupsPage() {
           )}
         </div>
       </div>
-
-      {/* Welcome overlay (re-triggered via the help FAB) */}
-      {welcomeReady && showWelcome && groups.length > 0 && (
-        <WelcomeFlow
-          hasGroups
-          userFirstName={session.user?.name?.split(" ")[0]}
-          onCreateGroup={() => {
-            dismissWelcome();
-            setShowCreateModal(true);
-          }}
-          onJoinWithLink={() => {
-            dismissWelcome();
-            focusJoinInput();
-          }}
-          onDismiss={dismissWelcome}
-          variant="overlay"
-        />
-      )}
-
-      {/* Persistent help affordance */}
-      {!showWelcome && <HelpFab onClick={openWelcomeOverlay} />}
 
       {/* Create Modal */}
       {showCreateModal && (
