@@ -114,6 +114,12 @@
   /* AI assistant colors */
   --ai-alice: oklch(0.25 0.02 55);
   --ai-bob: oklch(0.25 0.02 50);
+
+  /* Agent message surface */
+  --agent-message-background: oklch(0.19 0.025 155 / 0.94);
+  --agent-message-border: oklch(0.65 0.13 155 / 0.42);
+  --agent-message-accent: oklch(0.72 0.15 155 / 0.9);
+  --agent-message-highlight: oklch(0.72 0.15 155 / 0.08);
 }
 
 /* Light mode - warm cream editorial */
@@ -136,6 +142,10 @@
   --border: oklch(0.88 0.01 85);
   --input: oklch(0.92 0.008 85);
   --ring: oklch(0.55 0.12 55);
+  --agent-message-background: oklch(0.965 0.025 155 / 0.98);
+  --agent-message-border: oklch(0.55 0.13 155 / 0.38);
+  --agent-message-accent: oklch(0.48 0.14 155 / 0.9);
+  --agent-message-highlight: oklch(0.55 0.13 155 / 0.08);
 }
 
 /* Light mode overrides for backgrounds and panels */
@@ -405,7 +415,9 @@
 /* AI Message distinction */
 .message-ai {
   position: relative;
-  border-left: 2px solid oklch(0.75 0.14 55 / 0.4);
+  background: var(--agent-message-background);
+  border: 1px solid var(--agent-message-border);
+  border-left: 3px solid var(--agent-message-accent);
 }
 
 .message-ai::before {
@@ -415,7 +427,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, oklch(0.75 0.14 55 / 0.03), transparent 50%);
+  background: linear-gradient(135deg, var(--agent-message-highlight), transparent 55%);
   border-radius: inherit;
   pointer-events: none;
 }

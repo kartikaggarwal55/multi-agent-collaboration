@@ -1058,7 +1058,7 @@ export default function GroupPage({
                           alignRight
                             ? `${colors.bg} ${colors.text} shadow-sm border ${colors.border}`
                             : msg.role === "assistant"
-                              ? "bg-card/90 border border-border/50 shadow-sm backdrop-blur-sm message-ai"
+                              ? "message-ai shadow-sm backdrop-blur-sm"
                               : "bg-card/80 border border-border/50 shadow-sm backdrop-blur-sm"
                         }`}
                       >
