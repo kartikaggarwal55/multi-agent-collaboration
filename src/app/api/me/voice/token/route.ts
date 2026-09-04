@@ -7,19 +7,22 @@
 
 import { auth } from "@/lib/auth";
 import { getUserProfile } from "@/lib/profile";
-import { getCurrentDateTime } from "@/lib/api-utils";
+import { getCurrentDateTime, getTodayRange } from "@/lib/api-utils";
+import { isMapsConfigured } from "@/lib/agents/maps-tools";
 import { userHasCalendarAccess } from "@/lib/agents/calendar-tools";
 import { userHasGmailAccess } from "@/lib/agents/gmail-tools";
 import { listCalendarEvents, formatEventsForDisplay } from "@/lib/calendar";
 import { validateCalendarAccess } from "@/lib/calendar";
 import { searchGmailMessages, formatGmailSearchForDisplay } from "@/lib/gmail";
 import { validateGmailAccess } from "@/lib/gmail";
+import { createHmac } from "node:crypto";
 
-const OPENAI_REALTIME_MODEL = "gpt-4o-realtime-preview-2024-12-17";
-const OPENAI_VOICE = "alloy";
+const OPENAI_REALTIME_MODEL = process.env.OPENAI_REALTIME_MODEL || "gpt-realtime-2.1";
+const OPENAI_VOICE = process.env.OPENAI_REALTIME_VOICE || "marin";
+const OPENAI_REQUEST_TIMEOUT_MS = 15_000;
 
 // OpenAI Realtime tool definitions (subset most useful for voice)
-function getVoiceTools(hasCalendar: boolean, hasGmail: boolean) {
+function getVoiceTools(hasCalendar: boolean, hasGmail: boolean, hasMaps: boolean) {
   const tools: Array<{
     type: "function";
     name: string;
@@ -133,69 +136,70 @@ function getVoiceTools(hasCalendar: boolean, hasGmail: boolean) {
     );
   }
 
-  // Maps tools (always available - uses Google Maps API)
-  tools.push(
-    {
-      type: "function",
-      name: "maps_search_places",
-      description:
-        "Search for places, restaurants, venues, or businesses. Include location in the query for best results. Example: \"vegetarian restaurants near Park Slope Brooklyn\"",
-      parameters: {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            description: "Search query including place type and location",
+  if (hasMaps) {
+    tools.push(
+      {
+        type: "function",
+        name: "maps_search_places",
+        description:
+          "Search for places, restaurants, venues, or businesses. Include location in the query for best results. Example: \"vegetarian restaurants near Park Slope Brooklyn\"",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Search query including place type and location",
+            },
+            maxResults: {
+              type: "number",
+              description: "Maximum results (default 5, max 10)",
+            },
           },
-          maxResults: {
-            type: "number",
-            description: "Maximum results (default 5, max 10)",
-          },
+          required: ["query"],
         },
-        required: ["query"],
       },
-    },
-    {
-      type: "function",
-      name: "maps_get_place_details",
-      description:
-        "Get detailed info about a specific place: hours, phone, website, reviews. Use after searching.",
-      parameters: {
-        type: "object",
-        properties: {
-          placeId: {
-            type: "string",
-            description: "The place ID from a search result",
+      {
+        type: "function",
+        name: "maps_get_place_details",
+        description:
+          "Get detailed info about a specific place: hours, phone, website, reviews. Use after searching.",
+        parameters: {
+          type: "object",
+          properties: {
+            placeId: {
+              type: "string",
+              description: "The place ID from a search result",
+            },
           },
+          required: ["placeId"],
         },
-        required: ["placeId"],
       },
-    },
-    {
-      type: "function",
-      name: "maps_directions",
-      description:
-        "Get directions and travel time between two locations.",
-      parameters: {
-        type: "object",
-        properties: {
-          origin: {
-            type: "string",
-            description: "Starting location (address or place name)",
+      {
+        type: "function",
+        name: "maps_directions",
+        description:
+          "Get directions and travel time between two locations.",
+        parameters: {
+          type: "object",
+          properties: {
+            origin: {
+              type: "string",
+              description: "Starting location (address or place name)",
+            },
+            destination: {
+              type: "string",
+              description: "Ending location (address or place name)",
+            },
+            mode: {
+              type: "string",
+              description: "Travel mode: driving, walking, transit, or bicycling (default: driving)",
+            },
           },
-          destination: {
-            type: "string",
-            description: "Ending location (address or place name)",
-          },
-          mode: {
-            type: "string",
-            description: "Travel mode: driving, walking, transit, or bicycling (default: driving)",
-          },
+          required: ["origin", "destination"],
         },
-        required: ["origin", "destination"],
-      },
-    }
-  );
+      }
+    );
+  }
 
   // Date utility tools (always available - pure computation)
   tools.push(
@@ -322,16 +326,12 @@ export async function GET() {
       prefetchPromises.push(
         (async () => {
           try {
-            const now = new Date();
-            const startOfDay = new Date(now);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(now);
-            endOfDay.setHours(23, 59, 59, 999);
+            const { timeMin, timeMax } = getTodayRange();
 
             const events = await listCalendarEvents(
               userId,
-              startOfDay.toISOString(),
-              endOfDay.toISOString(),
+              timeMin,
+              timeMax,
               20
             );
 
@@ -368,39 +368,69 @@ export async function GET() {
     await Promise.all(prefetchPromises);
 
     // Build tools and system instruction
-    const tools = getVoiceTools(hasCalendar, hasGmail);
+    const hasMaps = isMapsConfigured();
+    const tools = getVoiceTools(hasCalendar, hasGmail, hasMaps);
     const systemInstruction = buildVoiceSystemInstruction(
       userName,
       profileItems,
       todaySchedule,
       recentEmails,
       hasCalendar,
-      hasGmail
+      hasGmail,
+      hasMaps
     );
 
-    // Create ephemeral OpenAI Realtime session
-    const openaiResponse = await fetch("https://api.openai.com/v1/realtime/sessions", {
+    const authSecret = process.env.AUTH_SECRET;
+    if (!authSecret) {
+      return new Response(
+        JSON.stringify({ error: "Auth secret not configured" }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // Stable and privacy-preserving identifier for OpenAI abuse monitoring.
+    const safetyIdentifier = createHmac("sha256", authSecret)
+      .update(userId)
+      .digest("hex");
+
+    // Mint a short-lived credential using the current GA Realtime API.
+    const openaiResponse = await fetch("https://api.openai.com/v1/realtime/client_secrets", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": safetyIdentifier,
       },
       body: JSON.stringify({
-        model: OPENAI_REALTIME_MODEL,
-        voice: OPENAI_VOICE,
-        modalities: ["audio", "text"],
-        instructions: systemInstruction,
-        input_audio_transcription: { model: "whisper-1" },
-        turn_detection: { type: "server_vad" },
-        tools,
-        tool_choice: "auto",
-        speed: 1.15,
+        // Leave enough time for first-use microphone permission prompts.
+        expires_after: { anchor: "created_at", seconds: 600 },
+        session: {
+          type: "realtime",
+          model: OPENAI_REALTIME_MODEL,
+          ...(OPENAI_REALTIME_MODEL.startsWith("gpt-realtime-2")
+            ? { reasoning: { effort: "low" } }
+            : {}),
+          output_modalities: ["audio"],
+          instructions: systemInstruction,
+          audio: {
+            input: {
+              transcription: { model: "gpt-4o-mini-transcribe" },
+              turn_detection: { type: "server_vad" },
+            },
+            output: {
+              voice: OPENAI_VOICE,
+              speed: 1.15,
+            },
+          },
+          tools,
+          tool_choice: "auto",
+        },
       }),
+      signal: AbortSignal.timeout(OPENAI_REQUEST_TIMEOUT_MS),
     });
 
     if (!openaiResponse.ok) {
-      const errorText = await openaiResponse.text();
-      console.error("OpenAI session creation failed:", openaiResponse.status, errorText);
+      console.error("OpenAI session creation failed:", openaiResponse.status);
       return new Response(
         JSON.stringify({ error: "Failed to create voice session" }),
         { status: 502, headers: { "Content-Type": "application/json" } }
@@ -408,16 +438,30 @@ export async function GET() {
     }
 
     const sessionData = await openaiResponse.json();
+    if (typeof sessionData.value !== "string" || sessionData.value.length === 0) {
+      console.error("OpenAI session creation returned no client secret");
+      return new Response(
+        JSON.stringify({ error: "Failed to create voice session" }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
       JSON.stringify({
-        token: sessionData.client_secret.value,
+        token: sessionData.value,
         model: OPENAI_REALTIME_MODEL,
         userName,
         hasCalendar,
         hasGmail,
+        hasMaps,
       }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": "no-store",
+        },
+      }
     );
 
   } catch (error) {
@@ -435,7 +479,8 @@ function buildVoiceSystemInstruction(
   todaySchedule: string,
   recentEmails: string,
   hasCalendar: boolean,
-  hasGmail: boolean
+  hasGmail: boolean,
+  hasMaps: boolean
 ): string {
   const profileSection = profile.length > 0
     ? profile.map(p => `- ${p}`).join('\n')
@@ -456,11 +501,11 @@ function buildVoiceSystemInstruction(
   const toolsSection = [];
   if (hasCalendar) toolsSection.push("- **Calendar**: Check schedule, find free time, look up upcoming events");
   if (hasGmail) toolsSection.push("- **Gmail**: Search emails for confirmations, receipts, travel plans, etc.");
-  toolsSection.push("- **Maps**: Search for restaurants, venues, businesses; get directions and travel times");
+  if (hasMaps) toolsSection.push("- **Maps**: Search for restaurants, venues, businesses; get directions and travel times");
   toolsSection.push("- **Date utilities**: Look up what day a date falls on, find upcoming weekends, count days between dates");
   toolsSection.push("- **Web search**: Search the web for current info — news, flights, hotels, weather, prices, sports, or any factual question");
 
-  const toolsText = `## Available Tools\nYou can use these tools when ${userName} asks about their schedule, emails, places, or related topics:\n${toolsSection.join('\n')}\n\nUse tools proactively when relevant - e.g. if asked "what's my week look like?", use the calendar tool. If asked about a restaurant, use the maps tool. If asked about current events, news, or anything you're unsure about, use web search. Never guess dates or days of the week - use the date tools.`;
+  const toolsText = `## Available Tools\nYou can use these tools when ${userName} asks about their schedule, emails, places, or related topics:\n${toolsSection.join('\n')}\n\nUse tools proactively when relevant - e.g. if asked "what's my week look like?", use the calendar tool.${hasMaps ? " If asked about a restaurant, use the maps tool." : ""} If asked about current events, news, or anything you're unsure about, use web search. Never guess dates or days of the week - use the date tools.`;
 
   return `You are ${userName}'s friendly personal voice assistant. You have a warm, conversational tone - like a helpful friend who genuinely cares about making their day better.
 

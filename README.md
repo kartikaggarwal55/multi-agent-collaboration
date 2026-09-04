@@ -32,8 +32,9 @@ A multi-assistant group chat where each human participant has their own AI assis
 
 ### Prerequisites
 
-- Node.js 18+
-- An Anthropic API key
+- Node.js 20.9+
+- An Anthropic API key (text assistants)
+- An OpenAI API key (optional, for voice)
 - PostgreSQL database (Neon recommended for Vercel deployment)
 - Google OAuth credentials (for calendar/email access)
 
@@ -70,10 +71,19 @@ npm run dev
 | `ANTHROPIC_API_KEY` | Your Anthropic API key | Yes |
 | `DATABASE_URL` | PostgreSQL connection string | Yes |
 | `AUTH_SECRET` | NextAuth.js secret | Yes |
+| `DEFAULT_TIMEZONE` | Timezone for calendar/date rendering | No (default: `America/Los_Angeles`) |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | Yes |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth secret | Yes |
 | `ASSISTANT_MODEL` | Claude model to use | No (default: `claude-opus-4-5`) |
+| `SUMMARY_MODEL` | Claude model for summaries | No (default: `claude-haiku-4-5`) |
 | `GOOGLE_MAPS_API_KEY` | For places/directions | No |
+| `OPENAI_API_KEY` | OpenAI Realtime voice | No |
+| `OPENAI_REALTIME_MODEL` | Realtime voice model | No (default: `gpt-realtime-2.1`) |
+| `OPENAI_REALTIME_VOICE` | Realtime voice preset | No (default: `marin`) |
+
+The main text assistants use Anthropic. `OPENAI_API_KEY` enables the separate
+Realtime voice experience; it is not a drop-in replacement for
+`ANTHROPIC_API_KEY`.
 
 ## Architecture
 
@@ -240,7 +250,7 @@ The `/me/assistant` route provides a 1:1 personal assistant with:
 
 ## Tech Stack
 
-- Next.js 15 (App Router)
+- Next.js 16 (App Router)
 - TypeScript
 - Tailwind CSS + shadcn/ui
 - Prisma + PostgreSQL
@@ -253,3 +263,10 @@ The `/me/assistant` route provides a 1:1 personal assistant with:
 Currently using **Claude Opus 4.5** (`claude-opus-4-5`).
 
 Configurable via `ASSISTANT_MODEL` environment variable.
+
+## Vercel deployment
+
+Set production secrets in Vercel rather than committing `.env` files. After
+changing an environment variable, redeploy so the new value is included in the
+deployment. To sync a local development environment from the linked project,
+run `vercel env pull .env.local`.

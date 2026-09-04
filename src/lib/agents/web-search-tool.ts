@@ -94,6 +94,6 @@ export async function executeWebSearch(query: string): Promise<string> {
     return result || "No results found for that search.";
   } catch (error) {
     console.error("Web search error:", error);
-    return `Sorry, the web search failed. ${error instanceof Error ? error.message : "Unknown error"}`;
+    return "Sorry, the web search is temporarily unavailable. Please try again.";
   }
 }

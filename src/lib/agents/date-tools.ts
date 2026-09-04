@@ -131,7 +131,7 @@ function getUpcomingWeekends(startDateStr?: string, count?: number): string {
   const startDate = startDateStr ? parseDate(startDateStr) : new Date();
 
   // Find next Friday
-  let current = new Date(startDate);
+  const current = new Date(startDate);
   while (current.getDay() !== 5) { // 5 = Friday
     current.setDate(current.getDate() + 1);
   }

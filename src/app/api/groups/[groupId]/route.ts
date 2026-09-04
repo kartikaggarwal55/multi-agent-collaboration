@@ -27,7 +27,7 @@ export async function GET(
       },
     });
 
-    if (!membership) {
+    if (!membership?.isActive) {
       return NextResponse.json(
         { error: "Not a member", needsJoin: true },
         { status: 403 }
@@ -50,7 +50,7 @@ export async function GET(
           },
         },
         messages: {
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: "desc" },
           take: 200, // Last 200 messages
         },
       },
@@ -113,7 +113,7 @@ export async function GET(
     }
 
     // Format messages
-    const messages = group.messages.map((m) => ({
+    const messages = [...group.messages].reverse().map((m) => ({
       id: m.id,
       roomId: groupId,
       createdAt: m.createdAt.toISOString(),
@@ -172,7 +172,7 @@ export async function PATCH(
       },
     });
 
-    if (!membership) {
+    if (!membership?.isActive) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 

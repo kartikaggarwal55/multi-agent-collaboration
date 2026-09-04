@@ -33,7 +33,7 @@ export async function POST(
       },
     });
 
-    if (!membership) {
+    if (!membership?.isActive) {
       return NextResponse.json({ error: "Not a member" }, { status: 403 });
     }
 
@@ -61,7 +61,7 @@ export async function POST(
           },
         },
         messages: {
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: "desc" },
           take: 100,
         },
       },
@@ -116,7 +116,7 @@ export async function POST(
 
     // Format existing messages
     const existingMessages: GroupMessageData[] = [
-      ...group.messages.map((m) => ({
+      ...[...group.messages].reverse().map((m) => ({
         id: m.id,
         groupId: m.groupId,
         authorId: m.authorId,
@@ -214,11 +214,6 @@ export async function POST(
                 sendEvent("error", { error: event.error });
                 break;
               case "done":
-                // Clear active status in DB
-                await prisma.group.update({
-                  where: { id: groupId },
-                  data: { activeStatus: null },
-                });
                 // Get final state
                 const finalGroup = await prisma.group.findUnique({
                   where: { id: groupId },
@@ -246,12 +241,24 @@ export async function POST(
         } catch (error) {
           console.error("Orchestration error:", error);
           sendEvent("error", {
-            error: error instanceof Error ? error.message : "Orchestration failed",
+            error: "The assistants are temporarily unavailable. Please try again.",
           });
           sendEvent("done", { stopReason: "ERROR" });
         } finally {
+          try {
+            await prisma.group.updateMany({
+              where: { id: groupId },
+              data: { activeStatus: null },
+            });
+          } catch (cleanupError) {
+            console.error("Failed to clear group active status:", cleanupError);
+          }
           isClosed = true;
-          controller.close();
+          try {
+            controller.close();
+          } catch {
+            // The client may have already disconnected and canceled the stream.
+          }
         }
       },
     });

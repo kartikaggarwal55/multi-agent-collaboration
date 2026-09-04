@@ -9,7 +9,7 @@ import { createCalendarToolsForUser, executeCalendarTool } from "./calendar-tool
 import { createGmailToolsForUser, executeGmailTool } from "./gmail-tools";
 import { MAPS_TOOLS, executeMapsTool, isMapsTool, isMapsConfigured } from "./maps-tools";
 import { DATE_TOOLS, executeDateTool, isDateTool } from "./date-tools";
-import { Citation, StopReason, CanonicalState, StatePatch, OpenQuestion, AssistantStatus, AssistantStatusType, MessageBlock } from "../types";
+import { Citation, StopReason, CanonicalState, StatePatch, AssistantStatus, AssistantStatusType, MessageBlock } from "../types";
 import { filterMessageForPrivacy } from "./privacy-filter";
 import { detectCompletedSteps } from "./step-completion-detector";
 
@@ -301,6 +301,11 @@ Consider:
 
 **Calendar events (STRICT):** Do not reveal event titles, descriptions, or attendee names in group chat — the group only needs to know WHEN someone is busy, not WHY. Say "Busy" or "has a conflict" instead of "Doctor's Appointment", "Therapy", "Interview at X", etc. This applies to your own output AND when presenting calendar data in timeline/text blocks. **Exception:** If the event itself is the topic of conversation or directly relevant to the group's goal (e.g., a shared meeting everyone is part of, or a trip booking being discussed), details are appropriate.
 
+**Shared state is public too:** Apply the same privacy rules to every free-text
+field in state_patch. Never put email excerpts, calendar titles, third-party names,
+specific addresses, or unrelated profile facts in shared state. Record only the
+abstract, goal-relevant constraint or decision.
+
 Examples of contextual judgment:
 - Calendar: Only share time blocks ("busy 2-4pm"). Never share event names or descriptions.
 - Email: Share relevant confirmations/dates. Quote only when the exact wording matters.
@@ -498,7 +503,6 @@ export async function* orchestrateGroupRun(
     timestamp: Date.now(),
   });
 
-  let anyPosted = false;
   let round = 0;
   const MAX_ROUNDS = 3; // Allow multiple rounds of assistant collaboration
 
@@ -575,12 +579,19 @@ export async function* orchestrateGroupRun(
           messageContent,
           currentState,
           owner.displayName,
-          allParticipantNames
+          allParticipantNames,
+          result.usedPrivateData
         );
 
         if (filterResult.wasModified) {
           console.log(`[PrivacyFilter] Modified message from ${assistant.displayName}`);
         }
+
+        // Structured blocks cannot be safely redacted field-by-field. Flatten
+        // any reviewed response so the UI cannot render unreviewed details.
+        const safeDetails = filterResult.wasReviewed ? undefined : result.blocks || undefined;
+        const safeContent = filterResult.filteredMessage.trim() ||
+          `I found information that may help, but I couldn't safely summarize it for the group. Please check with ${owner.displayName}.`;
 
         const messageData: GroupMessageData = {
           id: crypto.randomUUID(),
@@ -588,8 +599,8 @@ export async function* orchestrateGroupRun(
           authorId: assistant.id,
           authorName: assistant.displayName,
           role: "assistant",
-          content: filterResult.filteredMessage,
-          details: result.blocks || undefined,
+          content: safeContent,
+          details: safeDetails,
           citations: result.citations.length > 0 ? result.citations : undefined,
           createdAt: new Date().toISOString(),
         };
@@ -603,27 +614,34 @@ export async function* orchestrateGroupRun(
             role: "assistant",
             content: messageData.content,
             citations: result.citations.length > 0 ? JSON.stringify(result.citations) : null,
-            details: result.blocks ? JSON.stringify(result.blocks) : null,
+            details: safeDetails ? JSON.stringify(safeDetails) : null,
           },
         });
 
         // Push only content (no blocks) for conversation context — keeps it lean
         messages.push({ ...messageData, details: undefined });
         yield { type: "message", message: messageData };
-        anyPosted = true;
         roundPostedCount++;
         console.log(`[Orchestrator] ${assistant.displayName} posted, next_action: ${result.nextAction}`);
       }
 
+      // State patches are shown to the whole group and are not field-by-field
+      // reviewable, so never persist one derived from calendar or Gmail data.
+      const safeStatePatch = result.usedPrivateData
+        ? result.statePatch?.stage
+          ? { stage: result.statePatch.stage }
+          : null
+        : result.statePatch;
+
       // Apply state patch
-      if (result.statePatch) {
+      if (safeStatePatch) {
         // Capture previous steps before applying patch
         const previousSteps = [...(currentState.suggestedNextSteps || [])];
 
-        currentState = applyStatePatch(currentState, result.statePatch, assistant.id);
+        currentState = applyStatePatch(currentState, safeStatePatch, assistant.id);
 
         // Detect completed steps if next steps changed
-        if (result.statePatch.suggested_next_steps && result.content) {
+        if (safeStatePatch.suggested_next_steps && result.content) {
           const { completedSteps } = await detectCompletedSteps(
             previousSteps,
             currentState.suggestedNextSteps || [],
@@ -694,9 +712,11 @@ export async function* orchestrateGroupRun(
         continueCollaboration = true;
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
       console.error(`Error with ${assistant.displayName}:`, error);
-      yield { type: "error", error: `${assistant.displayName} encountered an error: ${errorMsg}` };
+      yield {
+        type: "error",
+        error: `${assistant.displayName} is temporarily unavailable. Please try again.`,
+      };
     }
     } // end for loop
 
@@ -711,13 +731,13 @@ export async function* orchestrateGroupRun(
     }
   } // end while loop
 
-  // Save final state
+  // Save and emit the same final state so refreshes do not regress its stage.
+  currentState.stage = "waiting_for_user";
   await prisma.group.update({
     where: { id: groupId },
     data: { canonicalState: JSON.stringify(currentState), lastActiveAt: new Date() },
   });
 
-  currentState.stage = "waiting_for_user";
   yield { type: "state_update", state: currentState };
   yield { type: "done", stopReason: "WAIT_FOR_USER" };
 }
@@ -729,6 +749,7 @@ interface AssistantResult {
   citations: Citation[];
   statePatch: Partial<StatePatch> | null;
   nextAction: string;
+  usedPrivateData: boolean;
 }
 
 async function callAssistant(
@@ -819,6 +840,7 @@ async function callAssistant(
     state_patch?: Partial<StatePatch>;
   }
   let emitTurnResult: EmitTurnInput | null = null;
+  let usedPrivateData = false;
 
   // Process response, handling tool calls
   // Strategy: Allow up to 4 rounds of tool use, then force emit_turn on round 5
@@ -826,8 +848,6 @@ async function callAssistant(
   let currentRound = 0;
   while (currentRound < MAX_ROUNDS) {
     currentRound++;
-    const isLastRound = currentRound === MAX_ROUNDS;
-
     // Capture text blocks (including web search results)
     for (const block of response.content) {
       if (block.type === "text") {
@@ -870,9 +890,11 @@ async function callAssistant(
         // Skip sending tool_result
         continue;
       } else if (calendarToolNames.includes(toolUse.name)) {
+        usedPrivateData = true;
         const result = await executeCalendarTool(ownerId, toolUse.name, toolUse.input as Record<string, unknown>);
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
       } else if (gmailToolNames.includes(toolUse.name)) {
+        usedPrivateData = true;
         const result = await executeGmailTool(ownerId, toolUse.name, toolUse.input as Record<string, unknown>);
         toolResults.push({ type: "tool_result", tool_use_id: toolUse.id, content: result });
       } else if (isMapsTool(toolUse.name)) {
@@ -987,6 +1009,7 @@ async function callAssistant(
     citations: allCitations,
     statePatch: emitTurnResult?.state_patch || null,
     nextAction: emitTurnResult?.next_action || "WAIT_FOR_USER",
+    usedPrivateData,
   };
 }
 

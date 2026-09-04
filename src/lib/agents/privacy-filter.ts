@@ -6,7 +6,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CanonicalState } from "../types";
 
 const anthropic = new Anthropic();
-const FILTER_MODEL = "claude-haiku-4-5";
+const FILTER_MODEL = process.env.SUMMARY_MODEL || "claude-haiku-4-5";
 
 interface PrivacyFilterContext {
   conversationGoal: string;
@@ -18,6 +18,7 @@ interface PrivacyFilterContext {
 interface FilterResult {
   filteredMessage: string;
   wasModified: boolean;
+  wasReviewed: boolean;
   modifications?: string[]; // Brief descriptions of what was redacted
 }
 
@@ -132,11 +133,12 @@ export async function filterMessageForPrivacy(
   rawMessage: string,
   canonicalState: CanonicalState,
   ownerName: string,
-  allParticipantNames: string[]
+  allParticipantNames: string[],
+  forceReview = false
 ): Promise<FilterResult> {
   // Skip filtering for very short messages (likely simple responses)
-  if (rawMessage.length < 50) {
-    return { filteredMessage: rawMessage, wasModified: false };
+  if (!forceReview && rawMessage.length < 50) {
+    return { filteredMessage: rawMessage, wasModified: false, wasReviewed: false };
   }
 
   // Skip if message doesn't reference data sources that might contain private info
@@ -152,8 +154,8 @@ export async function filterMessageForPrivacy(
     pattern.test(rawMessage)
   );
 
-  if (!mightContainSensitiveInfo) {
-    return { filteredMessage: rawMessage, wasModified: false };
+  if (!forceReview && !mightContainSensitiveInfo) {
+    return { filteredMessage: rawMessage, wasModified: false, wasReviewed: false };
   }
 
   const context: PrivacyFilterContext = {
@@ -178,37 +180,31 @@ export async function filterMessageForPrivacy(
 
     const filteredMessage = response.content[0].type === "text"
       ? response.content[0].text.trim()
-      : rawMessage;
+      : forceReview
+        ? `I found information that may help, but I couldn't safely summarize it for the group. Please check with ${ownerName}.`
+        : rawMessage;
 
     // Check if message was actually modified
     const wasModified = filteredMessage !== rawMessage;
 
-    // Detailed logging for debugging
     if (wasModified) {
-      console.log("\n╔══════════════════════════════════════════════════════════════");
-      console.log("║ [PrivacyFilter] MESSAGE MODIFIED");
-      console.log("╠══════════════════════════════════════════════════════════════");
-      console.log("║ BEFORE:");
-      console.log("╟──────────────────────────────────────────────────────────────");
-      rawMessage.split("\n").forEach(line => console.log(`║ ${line}`));
-      console.log("╠══════════════════════════════════════════════════════════════");
-      console.log("║ AFTER:");
-      console.log("╟──────────────────────────────────────────────────────────────");
-      filteredMessage.split("\n").forEach(line => console.log(`║ ${line}`));
-      console.log("╚══════════════════════════════════════════════════════════════\n");
-    } else {
-      console.log("[PrivacyFilter] No changes needed - message passed through");
+      console.log("[PrivacyFilter] Message modified before group delivery");
     }
 
     return {
       filteredMessage,
       wasModified,
+      wasReviewed: true,
       modifications: wasModified ? ["Privacy filter applied"] : undefined,
     };
   } catch (error) {
     console.error("[PrivacyFilter] Error filtering message:", error);
-    // On error, return original message rather than blocking
-    return { filteredMessage: rawMessage, wasModified: false };
+    // Never expose private-source content when the safety layer is unavailable.
+    return {
+      filteredMessage: `I found information that may help, but I couldn't safely summarize it for the group. Please check with ${ownerName}.`,
+      wasModified: true,
+      wasReviewed: true,
+      modifications: ["Private-source response withheld because privacy review failed"],
+    };
   }
 }
-

@@ -36,13 +36,6 @@ const SparklesIcon = () => (
   </svg>
 );
 
-const ClockIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 6V12L16 14" />
-  </svg>
-);
-
 const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
   <svg
     width="14"
@@ -56,29 +49,6 @@ const ChevronIcon = ({ expanded }: { expanded: boolean }) => (
     className={`transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
   >
     <path d="M6 9l6 6 6-6" />
-  </svg>
-);
-
-const UserIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
-
-const BotIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="11" width="18" height="10" rx="2" />
-    <circle cx="12" cy="5" r="2" />
-    <path d="M12 7v4" />
-    <circle cx="8" cy="16" r="1" fill="currentColor" />
-    <circle cx="16" cy="16" r="1" fill="currentColor" />
-  </svg>
-);
-
-const ArrowRightIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M5 12h14M12 5l7 7-7 7" />
   </svg>
 );
 
@@ -578,6 +548,23 @@ interface GroupData {
   createdBy?: { id: string; name: string | null };
 }
 
+function parseSseEventBlock(block: string) {
+  let type = "message";
+  const dataLines: string[] = [];
+
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith("event:")) {
+      type = line.slice(6).trimStart();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  return dataLines.length > 0
+    ? { type, data: dataLines.join("\n") }
+    : null;
+}
+
 // Generate consistent colors for participants - Orange, black, white scheme
 const PARTICIPANT_COLORS = [
   { bg: "bg-[oklch(0.65_0.15_55)]", text: "text-white", border: "border-[oklch(0.65_0.15_55)]" }, // Orange
@@ -620,6 +607,32 @@ export default function GroupPage({
   const [participantColorMap, setParticipantColorMap] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
+    const fetchGroup = async () => {
+      try {
+        const response = await fetch(`/api/groups/${groupId}`);
+        if (!response.ok) {
+          const data = await response.json();
+          if (data.needsJoin) {
+            router.push(`/join/${groupId}`);
+            return;
+          }
+          throw new Error(data.error || "Failed to fetch group");
+        }
+
+        const data = await response.json();
+        setGroup(data.group);
+        // Also set activeStatus if present (for page refresh while assistant is working)
+        if (data.group?.activeStatus) {
+          setActiveStatus(data.group.activeStatus);
+        }
+      } catch (err) {
+        console.error("Error fetching group:", err);
+        setError("Failed to load group");
+      } finally {
+        setIsFetching(false);
+      }
+    };
+
     if (status === "unauthenticated") {
       router.push(`/join/${groupId}`);
     } else if (status === "authenticated") {
@@ -727,32 +740,6 @@ export default function GroupPage({
     }
   }, [group?.participants]);
 
-  const fetchGroup = async () => {
-    try {
-      const response = await fetch(`/api/groups/${groupId}`);
-      if (!response.ok) {
-        const data = await response.json();
-        if (data.needsJoin) {
-          router.push(`/join/${groupId}`);
-          return;
-        }
-        throw new Error(data.error || "Failed to fetch group");
-      }
-
-      const data = await response.json();
-      setGroup(data.group);
-      // Also set activeStatus if present (for page refresh while assistant is working)
-      if (data.group?.activeStatus) {
-        setActiveStatus(data.group.activeStatus);
-      }
-    } catch (err) {
-      console.error("Error fetching group:", err);
-      setError("Failed to load group");
-    } finally {
-      setIsFetching(false);
-    }
-  };
-
   const sendMessage = async () => {
     if (!message.trim() || isLoading) return;
 
@@ -791,70 +778,73 @@ export default function GroupPage({
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
+          buffer += decoder.decode(value, { stream: !done });
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
+          const eventBlocks = buffer.split(/\r?\n\r?\n/);
+          buffer = eventBlocks.pop() ?? "";
+          if (done && buffer.trim()) {
+            eventBlocks.push(buffer);
+            buffer = "";
+          }
 
-          let eventType = "";
-          for (const line of lines) {
-            if (line.startsWith("event: ")) {
-              eventType = line.slice(7);
-            } else if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
+          for (const block of eventBlocks) {
+            const event = parseSseEventBlock(block);
+            if (!event) continue;
 
-                if (eventType === "message") {
-                  setGroup((prev) => {
-                    if (!prev) return prev;
-                    const exists = prev.messages.some((m) => m.id === data.id);
-                    if (exists) return prev;
-                    // Sort by createdAt to handle out-of-order SSE arrivals
-                    // Use id as tiebreaker for same-millisecond messages
-                    const newMessages = [...prev.messages, data].sort((a, b) => {
-                      const timeA = new Date(a.createdAt).getTime() || 0;
-                      const timeB = new Date(b.createdAt).getTime() || 0;
-                      if (timeA !== timeB) return timeA - timeB;
-                      return a.id.localeCompare(b.id); // Stable tiebreaker
-                    });
-                    return { ...prev, messages: newMessages };
+            try {
+              const data = JSON.parse(event.data);
+
+              if (event.type === "message") {
+                setGroup((prev) => {
+                  if (!prev) return prev;
+                  const exists = prev.messages.some((m) => m.id === data.id);
+                  if (exists) return prev;
+                  // Sort by createdAt to handle out-of-order SSE arrivals
+                  // Use id as tiebreaker for same-millisecond messages
+                  const newMessages = [...prev.messages, data].sort((a, b) => {
+                    const timeA = new Date(a.createdAt).getTime() || 0;
+                    const timeB = new Date(b.createdAt).getTime() || 0;
+                    if (timeA !== timeB) return timeA - timeB;
+                    return a.id.localeCompare(b.id); // Stable tiebreaker
                   });
+                  return { ...prev, messages: newMessages };
+                });
 
-                  // Update typing indicator
-                  if (data.role === "assistant") {
-                    const currentIndex = assistants.findIndex(
-                      (a) => a.id === data.authorId
-                    );
-                    const nextAssistant = assistants[(currentIndex + 1) % assistants.length];
-                    if (nextAssistant) {
-                      setCurrentlyTyping(nextAssistant.displayName);
-                    }
-                  }
-                } else if (eventType === "state") {
-                  setGroup((prev) =>
-                    prev ? { ...prev, canonicalState: data } : prev
+                // Update typing indicator
+                if (data.role === "assistant") {
+                  const currentIndex = assistants.findIndex(
+                    (a) => a.id === data.authorId
                   );
-                } else if (eventType === "status") {
-                  setCurrentlyTyping(data.status);
-                } else if (eventType === "assistant_status") {
-                  setActiveStatus(data);
-                } else if (eventType === "error") {
-                  setError(data.error);
-                } else if (eventType === "done") {
-                  if (data.canonicalState) {
-                    setGroup((prev) =>
-                      prev ? { ...prev, canonicalState: data.canonicalState } : prev
-                    );
+                  const nextAssistant = assistants[(currentIndex + 1) % assistants.length];
+                  if (nextAssistant) {
+                    setCurrentlyTyping(nextAssistant.displayName);
                   }
-                  setCurrentlyTyping(null);
-                  setActiveStatus(null);
                 }
-              } catch (e) {
-                console.error("Failed to parse SSE data:", e);
+              } else if (event.type === "state") {
+                setGroup((prev) =>
+                  prev ? { ...prev, canonicalState: data } : prev
+                );
+              } else if (event.type === "status") {
+                setCurrentlyTyping(data.status);
+              } else if (event.type === "assistant_status") {
+                setActiveStatus(data);
+              } else if (event.type === "error") {
+                setError(data.error);
+              } else if (event.type === "done") {
+                if (data.canonicalState) {
+                  setGroup((prev) =>
+                    prev ? { ...prev, canonicalState: data.canonicalState } : prev
+                  );
+                }
+                setCurrentlyTyping(null);
+                setActiveStatus(null);
               }
+            } catch (e) {
+              console.error("Failed to parse SSE data:", e);
             }
           }
+
+          if (done) break;
         }
       } else {
         const data = await response.json();
@@ -1240,7 +1230,6 @@ export default function GroupPage({
               <StatePanel
                 canonicalState={group.canonicalState}
                 participants={group.participants}
-                getParticipantColor={getParticipantColor}
                 getInitials={getInitials}
               />
             </div>
@@ -1428,12 +1417,10 @@ function TurnIndicator({
 function StatePanel({
   canonicalState,
   participants,
-  getParticipantColor,
   getInitials,
 }: {
   canonicalState: CanonicalState | null;
   participants: Participant[];
-  getParticipantColor: (id: string, role: string) => { bg: string; text: string; border: string };
   getInitials: (name: string) => string;
 }) {
   const [constraintsExpanded, setConstraintsExpanded] = useState(false);
@@ -1545,7 +1532,7 @@ function StatePanel({
                   return toTitleCase(name);
                 };
 
-                return Object.entries(grouped).map(([participantId, constraints], idx) => (
+                return Object.entries(grouped).map(([participantId, constraints]) => (
                   <div key={participantId}>
                     <div className="text-[14px] font-semibold text-foreground/80 mb-1">
                       {getDisplayName(participantId)}

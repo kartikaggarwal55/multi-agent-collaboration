@@ -8,7 +8,73 @@ const RATE_LIMIT_RETRY_DELAY_MS = 2000;
 const MAX_RATE_LIMIT_RETRIES = 2;
 
 // Default timezone - must match calendar.ts
-const DEFAULT_TIMEZONE = "America/Los_Angeles";
+export const DEFAULT_TIMEZONE = process.env.DEFAULT_TIMEZONE || "America/Los_Angeles";
+
+function getZonedParts(date: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  };
+}
+
+function zonedMidnightToUtc(
+  year: number,
+  month: number,
+  day: number,
+  timeZone: string
+): Date {
+  const target = Date.UTC(year, month - 1, day);
+  let candidate = target;
+
+  // Resolve the timezone offset at the target date. A second pass handles DST
+  // boundaries where the initial UTC guess falls under a different offset.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const actual = getZonedParts(new Date(candidate), timeZone);
+    const representedAsUtc = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second
+    );
+    candidate += target - representedAsUtc;
+  }
+
+  return new Date(candidate);
+}
+
+/** Get today's half-open time range in the configured application timezone. */
+export function getTodayRange(): { timeMin: string; timeMax: string } {
+  const today = getZonedParts(new Date(), DEFAULT_TIMEZONE);
+  const nextDay = new Date(Date.UTC(today.year, today.month - 1, today.day + 1));
+  const start = zonedMidnightToUtc(today.year, today.month, today.day, DEFAULT_TIMEZONE);
+  const end = zonedMidnightToUtc(
+    nextDay.getUTCFullYear(),
+    nextDay.getUTCMonth() + 1,
+    nextDay.getUTCDate(),
+    DEFAULT_TIMEZONE
+  );
+
+  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+}
 
 /**
  * Strip <cite> tags from web search results while preserving inner content.
@@ -66,16 +132,13 @@ export function getCurrentDateTime(): string {
   const monthStr = now.toLocaleString("en-US", { month: "2-digit", timeZone: DEFAULT_TIMEZONE });
   const isoDate = `${year}-${monthStr}-${day}`;
 
-  // Determine the year for upcoming months
-  const nextYear = year + 1;
-  const upcomingMonthYear = month >= 10 ? nextYear : year; // Nov/Dec → next year for Jan/Feb
-
   return `${formatted}
 ISO Date: ${isoDate}
 Timezone: ${DEFAULT_TIMEZONE}
 Current Year: ${year}
+Current Month Number: ${month + 1}
 
-IMPORTANT: When user mentions upcoming months like "January", "February", etc., use ${upcomingMonthYear} as the year (not ${year} if that month has passed).`;
+IMPORTANT: When the user names a month without a year, interpret the next occurrence: use ${year} if that month/date has not passed, otherwise use ${year + 1}.`;
 }
 
 /**

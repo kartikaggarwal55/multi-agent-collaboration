@@ -121,6 +121,23 @@ interface ProfileChange {
   timestamp: string;
 }
 
+function parseSseEventBlock(block: string) {
+  let type = "message";
+  const dataLines: string[] = [];
+
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith("event:")) {
+      type = line.slice(6).trimStart();
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+
+  return dataLines.length > 0
+    ? { type, data: dataLines.join("\n") }
+    : null;
+}
+
 export default function PrivateAssistantPage() {
   const { data: session, status } = useSession();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -149,6 +166,21 @@ export default function PrivateAssistantPage() {
     isConnecting: isVoiceConnecting,
   } = useVoiceSession();
 
+  const fetchChatData = useCallback(async () => {
+    try {
+      const response = await fetch("/api/me/chat");
+      if (!response.ok) throw new Error("Failed to fetch chat data");
+      const data = await response.json();
+      setMessages(data.messages || []);
+      setProfile(data.profile || []);
+      setHasCalendar(data.hasCalendar ?? null);
+      setHasGmail(data.hasGmail ?? null);
+    } catch (err) {
+      console.error("Error fetching chat:", err);
+      setError("Failed to load chat history");
+    }
+  }, []);
+
   useEffect(() => {
     if (status === "unauthenticated") {
       redirect("/auth/signin");
@@ -159,7 +191,7 @@ export default function PrivateAssistantPage() {
     if (status === "authenticated") {
       fetchChatData();
     }
-  }, [status]);
+  }, [status, fetchChatData]);
 
   // Poll for new messages when tab is visible and not actively loading
   useEffect(() => {
@@ -176,7 +208,7 @@ export default function PrivateAssistantPage() {
       }
 
       try {
-        const response = await fetch("/api/me/chat");
+        const response = await fetch("/api/me/chat?poll=1");
         if (response.ok) {
           const data = await response.json();
           const newMessages = data.messages || [];
@@ -227,21 +259,6 @@ export default function PrivateAssistantPage() {
     shouldAutoScroll.current = distanceFromBottom < 150;
   };
 
-  const fetchChatData = async () => {
-    try {
-      const response = await fetch("/api/me/chat");
-      if (!response.ok) throw new Error("Failed to fetch chat data");
-      const data = await response.json();
-      setMessages(data.messages || []);
-      setProfile(data.profile || []);
-      setHasCalendar(data.hasCalendar ?? null);
-      setHasGmail(data.hasGmail ?? null);
-    } catch (err) {
-      console.error("Error fetching chat:", err);
-      setError("Failed to load chat history");
-    }
-  };
-
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -270,35 +287,38 @@ export default function PrivateAssistantPage() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        buffer += decoder.decode(value, { stream: !done });
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        const eventBlocks = buffer.split(/\r?\n\r?\n/);
+        buffer = eventBlocks.pop() ?? "";
+        if (done && buffer.trim()) {
+          eventBlocks.push(buffer);
+          buffer = "";
+        }
 
-        let eventType = "";
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7);
-          } else if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6));
+        for (const block of eventBlocks) {
+          const event = parseSseEventBlock(block);
+          if (!event) continue;
 
-            if (eventType === "message") {
-              setMessages((prev) => {
-                const exists = prev.some((m) => m.id === data.id);
-                if (exists) return prev;
-                return [...prev, data];
-              });
-            } else if (eventType === "profile") {
-              setProfile(data.items || []);
-              if (data.changes) {
-                setRecentChanges((prev) => [...prev, ...data.changes].slice(-5));
-              }
-            } else if (eventType === "error") {
-              setError(data.error);
+          const data = JSON.parse(event.data);
+
+          if (event.type === "message") {
+            setMessages((prev) => {
+              const exists = prev.some((m) => m.id === data.id);
+              if (exists) return prev;
+              return [...prev, data];
+            });
+          } else if (event.type === "profile") {
+            setProfile(data.items || []);
+            if (data.changes) {
+              setRecentChanges((prev) => [...prev, ...data.changes].slice(-5));
             }
+          } else if (event.type === "error") {
+            setError(data.error);
           }
         }
+
+        if (done) break;
       }
     } catch (err) {
       console.error("Error sending message:", err);
@@ -497,7 +517,7 @@ export default function PrivateAssistantPage() {
                   Hi {session.user?.name?.split(" ")[0] || "there"}!
                 </p>
                 <p className="text-muted-foreground text-xs mt-1 max-w-sm">
-                  I'm your personal assistant. Tell me about yourself and I'll remember your preferences.
+                  I&apos;m your personal assistant. Tell me about yourself and I&apos;ll remember your preferences.
                 </p>
               </div>
             )}
@@ -800,7 +820,7 @@ function MessageBubble({
           >
             {isUser ? (
               isVoiceMessage ? (
-                <p className="text-sm whitespace-pre-wrap leading-relaxed italic">"{displayContent}"</p>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed italic">&ldquo;{displayContent}&rdquo;</p>
               ) : (
                 <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
               )

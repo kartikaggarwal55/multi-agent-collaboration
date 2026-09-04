@@ -1,5 +1,6 @@
 // CHANGED: Custom sign-in page with Google OAuth
 import { signIn, auth } from "@/lib/auth";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 // Google icon SVG
@@ -92,12 +93,12 @@ export default async function SignInPage() {
         </div>
 
         <div className="mt-8 pt-6 border-t border-border/30 text-center">
-          <a
+          <Link
             href="/"
             className="text-sm text-muted-foreground hover:text-[oklch(0.65_0.15_55)] transition-colors"
           >
             ← Back to Collaboration Room
-          </a>
+          </Link>
         </div>
       </div>
     </div>

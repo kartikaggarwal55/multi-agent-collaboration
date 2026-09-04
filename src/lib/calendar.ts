@@ -1,9 +1,9 @@
 // Google Calendar service for reading user events
 import { google, calendar_v3 } from "googleapis";
 import { getOAuth2Client } from "./google-auth";
+import { DEFAULT_TIMEZONE } from "./api-utils";
 
 // Default timezone for formatting - prevents UTC issues on Vercel
-const DEFAULT_TIMEZONE = "America/Los_Angeles";
 
 export interface CalendarEvent {
   id: string;

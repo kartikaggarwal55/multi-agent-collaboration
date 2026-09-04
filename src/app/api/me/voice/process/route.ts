@@ -64,8 +64,6 @@ export async function POST(request: Request) {
       .map(e => e.text)
       .filter(text => text.trim().length > 0);
 
-    console.log('Voice process: User messages:', userMessages);
-
     // Analyze user messages for profile updates
     const changes: ProfileChange[] = [];
     if (userMessages.length > 0) {
@@ -77,7 +75,7 @@ export async function POST(request: Request) {
         currentItems // Pass current profile so LLM can make informed decisions
       );
 
-      console.log('Voice process: Profile updates found:', JSON.stringify(profileUpdates));
+      console.log('Voice process: Profile updates found:', profileUpdates.length);
 
       if (profileUpdates && profileUpdates.length > 0) {
         const newItems = [...currentItems];
@@ -99,9 +97,9 @@ export async function POST(request: Request) {
                 reason: update.reason,
                 timestamp,
               });
-              console.log(`Profile: Added "${update.item}"`);
+              console.log("Profile: Added an item");
             } else {
-              console.log(`Profile: Skipped exact duplicate "${update.item}"`);
+              console.log("Profile: Skipped an exact duplicate");
             }
           } else if (update.action === "replace") {
             // LLM specifies exactly which item to replace via index
@@ -116,7 +114,7 @@ export async function POST(request: Request) {
                 reason: update.reason,
                 timestamp,
               });
-              console.log(`Profile: Replaced [${replaceIndex}] "${oldItem}" → "${update.item}"`);
+              console.log(`Profile: Replaced item at index ${replaceIndex}`);
             } else {
               console.log(`Profile: Invalid replaceIndex ${replaceIndex}, adding instead`);
               newItems.push(update.item);
@@ -137,7 +135,7 @@ export async function POST(request: Request) {
                 reason: update.reason,
                 timestamp,
               });
-              console.log(`Profile: Removed [${removeIndex}] "${removedItem}"`);
+              console.log(`Profile: Removed item at index ${removeIndex}`);
             }
           }
         }
@@ -259,7 +257,6 @@ Return [] if nothing to extract.`,
       const jsonMatch = content.text.match(/\[[\s\S]*\]/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        console.log('Voice process: Claude extracted:', parsed);
         return parsed;
       }
     }
@@ -270,4 +267,3 @@ Return [] if nothing to extract.`,
     return [];
   }
 }
-

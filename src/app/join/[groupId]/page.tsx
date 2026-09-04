@@ -36,42 +36,40 @@ export default function JoinGroupPage({
   const { data: session, status } = useSession();
   const router = useRouter();
   const [groupInfo, setGroupInfo] = useState<GroupInfo | null>(null);
-  const [isMember, setIsMember] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchGroupInfo();
-  }, [groupId]);
-
-  const fetchGroupInfo = async () => {
-    try {
-      const response = await fetch(`/api/groups/${groupId}/join`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          setError("Group not found");
-        } else {
-          throw new Error("Failed to fetch group info");
+    const fetchGroupInfo = async () => {
+      try {
+        const response = await fetch(`/api/groups/${groupId}/join`);
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError("Group not found");
+          } else {
+            throw new Error("Failed to fetch group info");
+          }
+          return;
         }
-        return;
-      }
 
-      const data = await response.json();
-      setGroupInfo(data.group);
-      setIsMember(data.isMember);
+        const data = await response.json();
+        setGroupInfo(data.group);
 
-      // If already a member, redirect to group
-      if (data.isMember) {
-        router.push(`/groups/${groupId}`);
+        // If already a member, redirect to group
+        if (data.isMember) {
+          router.push(`/groups/${groupId}`);
+        }
+      } catch (err) {
+        console.error("Error fetching group:", err);
+        setError("Failed to load group information");
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.error("Error fetching group:", err);
-      setError("Failed to load group information");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    fetchGroupInfo();
+  }, [groupId, router]);
 
   const handleJoin = async () => {
     if (!session) {
@@ -186,7 +184,7 @@ export default function JoinGroupPage({
                   Sign in to Join
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  You'll need to sign in with Google to join this group
+                  You&apos;ll need to sign in with Google to join this group
                 </p>
               </div>
             )}

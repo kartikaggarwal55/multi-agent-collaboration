@@ -48,7 +48,7 @@ const messageSchema = z.object({
 });
 
 // GET - Fetch chat history and profile
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
@@ -59,18 +59,43 @@ export async function GET() {
     }
 
     const userId = session.user.id;
+    const isPoll = new URL(request.url).searchParams.get("poll") === "1";
+
+    const messagesPromise = prisma.privateMessage.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" as const },
+      take: 100,
+    });
+
+    // Polling only needs message IDs/content. Avoid refreshing OAuth tokens and
+    // calling Calendar/Gmail every five seconds for a visible tab.
+    if (isPoll) {
+      const messages = [...await messagesPromise].reverse();
+      return new Response(
+        JSON.stringify({
+          messages: messages.map((message) => ({
+            id: message.id,
+            role: message.role,
+            content: message.content,
+            createdAt: message.createdAt.toISOString(),
+          })),
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
+        }
+      );
+    }
 
     // Fetch messages and profile in parallel
-    const [messages, profileItems] = await Promise.all([
-      prisma.privateMessage.findMany({
-        where: { userId },
-        orderBy: { createdAt: "asc" },
-        take: 100,
-      }),
+    const [messagesDesc, profileItems] = await Promise.all([
+      messagesPromise,
       getUserProfile(userId),
     ]);
-    console.log("[Profile] GET - userId:", userId, "profileItems:", profileItems);
-
+    const messages = [...messagesDesc].reverse();
     // Check if user has calendar and gmail connected
     // Find all Google accounts and prefer the one with most scopes
     const accounts = await prisma.account.findMany({
@@ -365,7 +390,6 @@ export async function POST(request: Request) {
             if (emitTurnResult) {
               console.log("[Profile] Path: emit_turn was called");
               assistantContent = emitTurnResult.message || "";
-              console.log("[Profile] emit_turn profile_updates:", JSON.stringify(emitTurnResult.profile_updates, null, 2));
               if (emitTurnResult.profile_updates?.should_update) {
                 profileUpdate = {
                   should_update: true,
@@ -467,7 +491,7 @@ export async function POST(request: Request) {
             itemCount: profileUpdate?.new_profile_items?.length,
           });
           if (profileUpdate?.should_update && profileUpdate.new_profile_items) {
-            console.log("[Profile] Saving profile items:", profileUpdate.new_profile_items);
+            console.log("[Profile] Saving profile items:", profileUpdate.new_profile_items.length);
             await updateUserProfile(
               userId,
               profileUpdate.new_profile_items,
@@ -490,7 +514,7 @@ export async function POST(request: Request) {
         } catch (error) {
           console.error("Error calling assistant:", error);
           sendEvent("error", {
-            error: error instanceof Error ? error.message : "Unknown error",
+            error: "The assistant is temporarily unavailable. Please try again.",
           });
         }
 

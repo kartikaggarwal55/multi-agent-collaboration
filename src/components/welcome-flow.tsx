@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
@@ -215,9 +215,9 @@ function DialogueExample() {
           You type
         </span>
         <p className="text-foreground/90">
-          <span className="font-serif italic text-muted-foreground">"</span>
+          <span className="font-serif italic text-muted-foreground">&ldquo;</span>
           I&apos;m free tuesday or thursday after 6pm. prefer somewhere quiet.
-          <span className="font-serif italic text-muted-foreground">"</span>
+          <span className="font-serif italic text-muted-foreground">&rdquo;</span>
         </p>
       </div>
       <div className="h-px bg-border/60" />

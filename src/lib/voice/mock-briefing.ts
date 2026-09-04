@@ -299,8 +299,6 @@ export function getProactiveInsight(briefing: DailyBriefing, alreadyCovered: str
   }
 
   // Check for upcoming high-priority meeting
-  const now = new Date();
-  const currentHour = now.getHours();
   const highPriorityMeeting = briefing.events.find(
     e => e.importance === 'high' && !alreadyCovered.includes(`event-${e.id}`)
   );
