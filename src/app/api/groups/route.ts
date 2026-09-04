@@ -12,37 +12,43 @@ export async function GET() {
   }
 
   try {
-    const memberships = await prisma.groupMember.findMany({
-      where: {
-        userId: session.user.id,
-        isActive: true,
-      },
-      include: {
-        group: {
-          include: {
-            createdBy: {
-              select: { id: true, name: true, image: true },
-            },
-            members: {
-              where: { isActive: true },
-              include: {
-                user: {
-                  select: { id: true, name: true, image: true },
+    const [memberships, user] = await Promise.all([
+      prisma.groupMember.findMany({
+        where: {
+          userId: session.user.id,
+          isActive: true,
+        },
+        include: {
+          group: {
+            include: {
+              createdBy: {
+                select: { id: true, name: true, image: true },
+              },
+              members: {
+                where: { isActive: true },
+                include: {
+                  user: {
+                    select: { id: true, name: true, image: true },
+                  },
                 },
               },
-            },
-            _count: {
-              select: { messages: true },
+              _count: {
+                select: { messages: true },
+              },
             },
           },
         },
-      },
-      orderBy: {
-        group: {
-          lastActiveAt: "desc",
+        orderBy: {
+          group: {
+            lastActiveAt: "desc",
+          },
         },
-      },
-    });
+      }),
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { createdAt: true },
+      }),
+    ]);
 
     const groups = memberships.map((m) => ({
       id: m.group.id,
@@ -61,7 +67,12 @@ export async function GET() {
       myRole: m.role,
     }));
 
-    return NextResponse.json({ groups });
+    const firstSignUpWindowMs = 10 * 60 * 1000;
+    const showWelcome = Boolean(
+      user && user.createdAt.getTime() >= Date.now() - firstSignUpWindowMs
+    );
+
+    return NextResponse.json({ groups, showWelcome });
   } catch (error) {
     console.error("Error fetching groups:", error);
     return NextResponse.json(

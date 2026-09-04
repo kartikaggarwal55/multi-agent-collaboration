@@ -12,7 +12,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { CanonicalState, AssistantStatus, MessageBlock, DetailItem } from "@/lib/types";
 import { ChatNav } from "@/components/chat-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ChatCoachmark } from "@/components/chat-coachmark";
 
 const LogOutIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1191,16 +1190,11 @@ export default function GroupPage({
         )}
 
         {/* Input */}
-        <div className="relative px-6 py-4 border-t border-border/50 bg-background/80 backdrop-blur-xl">
-          <ChatCoachmark
-            storageKey="group-chat-composer"
-            title="You're talking to your own assistant here."
-            body="Type as you would to a personal EA. It listens to you alone, then speaks for you to the group."
-          />
+        <div className="px-6 py-4 border-t border-border/50 bg-background/80 backdrop-blur-xl">
           <div className="flex items-center gap-3">
             <div className="flex-1 relative input-glow rounded-lg">
               <Input
-                placeholder="Talk to your assistant — it'll speak for you…"
+                placeholder="Type your message..."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
